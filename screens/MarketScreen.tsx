@@ -1,329 +1,214 @@
-import React, { useMemo, useState } from 'react';
+// ============================================================
+// Salon na we yon - Market Screen
+// Buy, sell, and browse marketplace items
+// ============================================================
+
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+  View, Text, FlatList, TouchableOpacity,
+  StyleSheet, RefreshControl, TextInput, ScrollView, Alert, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
+import { useApp } from '../lib/context';
+import { getMarketItems, createMarketItem, toggleMarketLike, marketCategories, formatPrice } from '../lib/market';
+import { Avatar, Card, GradientHeader, Badge, Button, EmptyState, LoadingSpinner } from '../components/UIComponents';
+import { PointsBadge } from '../components/PointsBadge';
+import type { MarketItem } from '../lib/types';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
-import { useApp } from '../context/AppContext';
-import { Avatar, Button, Card, Chip, Empty, Field, FlagBar } from '../components/UI';
-import { VaultImage } from '../components/VaultImage';
-import { Listing, ListingCategory } from '../lib/types';
-import { timeAgo } from '../lib/hash';
 
-const CATS: ListingCategory[] = [
-  'food',
-  'fashion',
-  'electronics',
-  'agriculture',
-  'services',
-  'crafts',
-  'transport',
-  'property',
-  'other',
-];
-
-export default function MarketScreen() {
-  const nav = useNavigation<any>();
-  const {
-    palette,
-    t,
-    listings,
-    user,
-    getUser,
-    createListing,
-    markListingSold,
-    deleteListing,
-    openConversation,
-    tap,
-    isPremium,
-    boostListing,
-  } = useApp();
-  const [q, setQ] = useState('');
-  const [cat, setCat] = useState<ListingCategory | 'all'>('all');
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [price, setPrice] = useState('');
-  const [location, setLocation] = useState(user?.location || '');
-  const [category, setCategory] = useState<ListingCategory>('food');
-  const [img, setImg] = useState<string | null>(null);
+export default function MarketScreen({ navigation }: any) {
+  const { user, theme, refreshUser } = useApp();
+  const c = theme.colors;
+  const [items, setItems] = useState<MarketItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [detail, setDetail] = useState<Listing | null>(null);
+  const [category, setCategory] = useState('All');
+  const [showCreate, setShowCreate] = useState(false);
+  const [title, setTitle] = useState('');
+  const [desc, setDesc] = useState('');
+  const [price, setPrice] = useState('');
+  const [location, setLocation] = useState('');
+  const [itemCategory, setItemCategory] = useState('Electronics');
+  const [itemCondition, setItemCondition] = useState<'new' | 'used' | 'refurbished'>('new');
 
-  const data = useMemo(() => {
-    return listings
-      .filter((l) => (cat === 'all' ? true : l.category === cat))
-      .filter((l) => {
-        const s = q.trim().toLowerCase();
-        if (!s) return true;
-        return (
-          l.title.toLowerCase().includes(s) ||
-          l.description.toLowerCase().includes(s) ||
-          l.location.toLowerCase().includes(s)
-        );
-      })
-      .sort((a, b) => {
-        if (a.boosted !== b.boosted) return a.boosted ? -1 : 1;
-        return b.createdAt - a.createdAt;
-      });
-  }, [listings, cat, q]);
+  const loadItems = useCallback(async () => {
+    const i = await getMarketItems(category);
+    setItems(i);
+    setLoading(false);
+  }, [category]);
 
-  const pick = async () => {
-    tap();
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-    if (!res.canceled && res.assets[0]?.uri) setImg(res.assets[0].uri);
+  useEffect(() => { loadItems(); }, [loadItems]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadItems();
+    await refreshUser();
+    setRefreshing(false);
   };
 
-  const submit = async () => {
-    if (!title.trim() || !description.trim()) return;
-    await createListing({
-      title,
-      description,
-      price: Number(price) || 0,
-      category,
-      location,
-      image: img,
-    });
-    setOpen(false);
-    setTitle('');
-    setDescription('');
-    setPrice('');
-    setImg(null);
+  const handleLike = async (itemId: string) => {
+    if (!user) return;
+    await toggleMarketLike(itemId, user.id);
+    await loadItems();
+    await refreshUser();
   };
 
-  const messageSeller = async (listing: Listing) => {
-    if (!user || listing.userId === user.id) return;
-    const id = await openConversation(listing.userId);
-    setDetail(null);
-    nav.navigate('Chat', { conversationId: id });
+  const handleCreate = async () => {
+    if (!user || !title.trim() || !price.trim()) {
+      Alert.alert('Error', 'Please fill in title and price.');
+      return;
+    }
+    const priceNum = parseInt(price.replace(/[^0-9]/g, ''), 10);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      Alert.alert('Error', 'Please enter a valid price.');
+      return;
+    }
+    await createMarketItem(
+      user.id, user.displayName, user.avatar,
+      title.trim(), desc.trim(), priceNum, 'Le',
+      itemCategory, location.trim() || 'Sierra Leone', itemCondition
+    );
+    setShowCreate(false);
+    setTitle(''); setDesc(''); setPrice(''); setLocation('');
+    await loadItems();
+    await refreshUser();
+    Alert.alert('Success', 'Item listed in the market! +10 points');
   };
+
+  const conditionColors: Record<string, string> = { new: c.success, used: c.warning, refurbished: c.primary };
+
+  const renderItem = ({ item }: { item: MarketItem }) => (
+    <Card theme={theme}>
+      <View style={styles.itemHeader}>
+        <Avatar uri={item.sellerAvatar} size={36} theme={theme} name={item.sellerName} />
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: c.text }}>{item.sellerName}</Text>
+          <Text style={{ fontSize: 11, color: c.textMuted }}>{item.location} · {new Date(item.createdAt).toLocaleDateString()}</Text>
+        </View>
+        {item.sold && <Badge theme={theme} text="SOLD" color={c.error} size="small" />}
+      </View>
+
+      <Text style={[styles.itemTitle, { color: c.text }]}>{item.title}</Text>
+      <Text style={[styles.itemDesc, { color: c.textSecondary }]} numberOfLines={2}>{item.description}</Text>
+
+      <View style={styles.itemMeta}>
+        <Text style={[styles.itemPrice, { color: c.primary }]}>{formatPrice(item.price, item.currency)}</Text>
+        <Badge theme={theme} text={item.condition.toUpperCase()} color={conditionColors[item.condition]} size="small" />
+        <Badge theme={theme} text={item.category} color={c.primaryLight} size="small" />
+      </View>
+
+      <View style={styles.itemActions}>
+        <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(item.id)}>
+          <Ionicons
+            name={item.likes.includes(user?.id || '') ? 'heart' : 'heart-outline'}
+            size={20}
+            color={item.likes.includes(user?.id || '') ? c.error : c.textSecondary}
+          />
+          <Text style={{ fontSize: 12, color: c.textSecondary, marginLeft: 4 }}>{item.likes.length}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn}>
+          <Ionicons name="eye-outline" size={18} color={c.textSecondary} />
+          <Text style={{ fontSize: 12, color: c.textSecondary, marginLeft: 4 }}>{item.views}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn}>
+          <Ionicons name="chatbubble-outline" size={18} color={c.textSecondary} />
+          <Text style={{ fontSize: 12, color: c.textSecondary, marginLeft: 4 }}>Message</Text>
+        </TouchableOpacity>
+      </View>
+    </Card>
+  );
+
+  if (loading) return <LoadingSpinner theme={theme} />;
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: palette.bg }]} edges={['top']}>
-      <FlagBar />
-      <View style={[styles.head, { backgroundColor: palette.header, borderBottomColor: palette.border }]}>
-        <View>
-          <Text style={{ color: palette.muted, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 }}>SALONE</Text>
-          <Text style={{ color: palette.text, fontSize: 20, fontWeight: '900' }}>{t('market')}</Text>
-        </View>
-        <Button title={t('sell')} icon="add" onPress={() => setOpen(true)} style={{ paddingHorizontal: 14, minHeight: 40 }} />
-      </View>
-
-      <View style={{ paddingHorizontal: 14, paddingTop: 10 }}>
-        <View style={[styles.search, { backgroundColor: palette.card, borderColor: palette.border }]}>
-          <Ionicons name="search" size={18} color={palette.muted} />
-          <TextInput
-            value={q}
-            onChangeText={setQ}
-            placeholder={t('search')}
-            placeholderTextColor={palette.muted}
-            style={{ flex: 1, color: palette.text, marginLeft: 8, paddingVertical: 8 }}
-          />
-        </View>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={['all', ...CATS] as const}
-          keyExtractor={(i) => i}
-          contentContainerStyle={{ paddingVertical: 10 }}
-          renderItem={({ item }) => (
-            <Chip
-              label={item === 'all' ? t('all') : t(item)}
-              active={cat === item}
-              onPress={() => setCat(item as any)}
-            />
-          )}
-        />
-      </View>
-
-      <FlatList
-        data={data}
-        keyExtractor={(i) => i.id}
-        numColumns={1}
-        contentContainerStyle={{ padding: 14, paddingBottom: 100 }}
-        refreshing={refreshing}
-        onRefresh={() => {
-          setRefreshing(true);
-          setTimeout(() => setRefreshing(false), 450);
-        }}
-        ListEmptyComponent={<Empty icon="storefront-outline" title={t('noListings')} />}
-        renderItem={({ item }) => {
-          const seller = getUser(item.userId);
-          return (
-            <Pressable onPress={() => setDetail(item)}>
-              <Card style={{ marginBottom: 12, padding: 0, overflow: 'hidden' }}>
-                {item.image ? (
-                  <VaultImage uri={item.image} style={{ width: '100%', height: 160 }} />
-                ) : (
-                  <View style={[styles.ph, { backgroundColor: palette.bgAlt }]}>
-                    <Ionicons name="cube-outline" size={36} color={palette.primary} />
-                  </View>
-                )}
-                <View style={{ padding: 12 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ color: palette.text, fontWeight: '800', fontSize: 16, flex: 1 }}>
-                      {item.boosted ? '⚡ ' : ''}
-                      {item.title}
-                    </Text>
-                    <Text style={{ color: palette.primary, fontWeight: '900' }}>
-                      {item.price ? `Le ${item.price.toLocaleString()}` : 'Talk'}
-                    </Text>
-                  </View>
-                  <Text style={{ color: palette.muted, marginTop: 4 }} numberOfLines={2}>
-                    {item.description}
-                  </Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8 }}>
-                    <Avatar uri={seller?.avatar} name={seller?.displayName} size={24} />
-                    <Text style={{ color: palette.muted, fontSize: 12, flex: 1 }}>
-                      {seller?.displayName} · {item.location} · {timeAgo(item.createdAt)}
-                    </Text>
-                    <View
-                      style={{
-                        paddingHorizontal: 8,
-                        paddingVertical: 3,
-                        borderRadius: 8,
-                        backgroundColor: item.status === 'sold' ? palette.border : palette.bgAlt,
-                      }}
-                    >
-                      <Text style={{ fontSize: 11, fontWeight: '800', color: palette.text }}>
-                        {item.status === 'sold' ? t('sold') : t('available')}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </Card>
-            </Pressable>
-          );
-        }}
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
+      <GradientHeader
+        theme={theme}
+        title="Market 🛍️"
+        subtitle="Buy & sell in the community"
+        right={
+          <TouchableOpacity onPress={() => setShowCreate(true)} style={[styles.sellBtn, { backgroundColor: c.primary }]}>
+            <Ionicons name="add" size={22} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13, marginLeft: 2 }}>Sell</Text>
+          </TouchableOpacity>
+        }
       />
 
-      <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: palette.bg }}>
-          <View style={[styles.modalHead, { borderBottomColor: palette.border }]}>
-            <Pressable onPress={() => setOpen(false)}>
-              <Text style={{ color: palette.primary, fontWeight: '700' }}>{t('cancel')}</Text>
-            </Pressable>
-            <Text style={{ color: palette.text, fontWeight: '800' }}>{t('newListing')}</Text>
-            <View style={{ width: 50 }} />
-          </View>
-          <FlatList
-            data={[]}
-            renderItem={null}
-            ListHeaderComponent={
-              <View style={{ padding: 16 }}>
-                <Field label={t('title')} value={title} onChangeText={setTitle} placeholder="Cassava leaf, 5kg" />
-                <Field
-                  label={t('description')}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="Fresh from Bo market…"
-                  multiline
-                />
-                <Field
-                  label={t('price')}
-                  value={price}
-                  onChangeText={setPrice}
-                  keyboardType="numeric"
-                  placeholder="150"
-                />
-                <Field label={t('location')} value={location} onChangeText={setLocation} />
-                <Text style={{ color: palette.muted, fontWeight: '700', fontSize: 12, marginBottom: 8 }}>
-                  {t('category').toUpperCase()}
-                </Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                  {CATS.map((c) => (
-                    <Chip key={c} label={t(c)} active={category === c} onPress={() => setCategory(c)} />
+      {/* Categories */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catRow}>
+        {marketCategories.map(cat => (
+          <TouchableOpacity
+            key={cat}
+            onPress={() => setCategory(cat)}
+            style={[styles.catBtn, {
+              backgroundColor: category === cat ? c.primary : c.surfaceAlt,
+              borderColor: category === cat ? c.primary : c.border,
+            }]}
+          >
+            <Text style={{ color: category === cat ? '#fff' : c.text, fontSize: 13, fontWeight: '600' }}>{cat}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <FlatList
+        data={items}
+        renderItem={renderItem}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.primary} />}
+        ListEmptyComponent={<EmptyState theme={theme} icon="🛍️" title="No items found" subtitle="Be the first to list something!" />}
+      />
+
+      {/* Create Item Modal */}
+      <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: c.surface }]}>
+            <View style={styles.modalHeader}>
+              <Text style={{ fontSize: 20, fontWeight: '800', color: c.text }}>List an Item</Text>
+              <TouchableOpacity onPress={() => setShowCreate(false)}>
+                <Ionicons name="close" size={28} color={c.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ gap: 12 }}>
+              <TextInput style={[styles.modalInput, { backgroundColor: c.surfaceAlt, color: c.text, borderColor: c.border }]} placeholder="Item title" placeholderTextColor={c.textMuted} value={title} onChangeText={setTitle} />
+              <TextInput style={[styles.modalInput, { backgroundColor: c.surfaceAlt, color: c.text, borderColor: c.border }, { minHeight: 80 }]} placeholder="Description" placeholderTextColor={c.textMuted} value={desc} onChangeText={setDesc} multiline />
+              <TextInput style={[styles.modalInput, { backgroundColor: c.surfaceAlt, color: c.text, borderColor: c.border }]} placeholder="Price (in Leones)" placeholderTextColor={c.textMuted} value={price} onChangeText={setPrice} keyboardType="numeric" />
+              <TextInput style={[styles.modalInput, { backgroundColor: c.surfaceAlt, color: c.text, borderColor: c.border }]} placeholder="Location (e.g. Freetown)" placeholderTextColor={c.textMuted} value={location} onChangeText={setLocation} />
+              <View style={{ gap: 6 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: c.textSecondary }}>Condition</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {(['new', 'used', 'refurbished'] as const).map(cond => (
+                    <TouchableOpacity key={cond} onPress={() => setItemCondition(cond)} style={[styles.condBtn, { backgroundColor: itemCondition === cond ? c.primary : c.surfaceAlt, borderColor: itemCondition === cond ? c.primary : c.border }]}>
+                      <Text style={{ color: itemCondition === cond ? '#fff' : c.text, fontSize: 13, fontWeight: '600' }}>{cond.charAt(0).toUpperCase() + cond.slice(1)}</Text>
+                    </TouchableOpacity>
                   ))}
                 </View>
-                {img ? <VaultImage uri={img} style={{ width: '100%', height: 160, borderRadius: 14, marginBottom: 12 }} /> : null}
-                <Button title={t('uploadPhoto')} icon="image-outline" variant="soft" onPress={pick} />
-                <View style={{ height: 10 }} />
-                <Button title={t('publish')} onPress={submit} disabled={!title.trim() || !description.trim()} />
               </View>
-            }
-          />
-        </SafeAreaView>
-      </Modal>
-
-      <Modal visible={!!detail} animationType="fade" transparent onRequestClose={() => setDetail(null)}>
-        <Pressable style={styles.overlay} onPress={() => setDetail(null)}>
-          <Pressable style={[styles.sheet, { backgroundColor: palette.card }]} onPress={() => {}}>
-            {detail?.image ? (
-              <VaultImage uri={detail.image} style={{ width: '100%', height: 180 }} />
-            ) : null}
-            <View style={{ padding: 16 }}>
-              <Text style={{ color: palette.text, fontSize: 20, fontWeight: '900' }}>{detail?.title}</Text>
-              <Text style={{ color: palette.primary, fontWeight: '800', marginTop: 4 }}>
-                {detail?.price ? `Le ${detail.price.toLocaleString()}` : 'Price on request'}
-              </Text>
-              <Text style={{ color: palette.text, marginTop: 10, lineHeight: 21 }}>{detail?.description}</Text>
-              <Text style={{ color: palette.muted, marginTop: 8 }}>
-                {detail?.location} · {detail ? t(detail.category) : ''}
-              </Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
-                {detail && user && detail.userId !== user.id ? (
-                  <Button title={t('contactSeller')} icon="chatbubble" onPress={() => messageSeller(detail)} style={{ flex: 1 }} />
-                ) : null}
-                {detail && user && (detail.userId === user.id || user.isDeveloper) ? (
-                  <>
-                    {detail.status !== 'sold' ? (
-                      <Button title={t('markSold')} variant="soft" onPress={() => { markListingSold(detail.id); setDetail({ ...detail, status: 'sold' }); }} style={{ flex: 1 }} />
-                    ) : null}
-                    {!detail.boosted ? (
-                      <Button
-                        title={t('boost')}
-                        variant="soft"
-                        onPress={() => {
-                          if (!isPremium()) {
-                            setDetail(null);
-                            nav.navigate('Premium');
-                            return;
-                          }
-                          boostListing(detail.id);
-                          setDetail({ ...detail, boosted: true });
-                        }}
-                        style={{ flex: 1 }}
-                      />
-                    ) : null}
-                    <Button title={t('delete')} variant="danger" onPress={() => { deleteListing(detail.id); setDetail(null); }} style={{ flex: 1 }} />
-                  </>
-                ) : null}
-              </View>
-            </View>
-          </Pressable>
-        </Pressable>
+              <Button theme={theme} title="List Item" onPress={handleCreate} size="large" />
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  head: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  search: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingHorizontal: 12 },
-  ph: { height: 120, alignItems: 'center', justifyContent: 'center' },
-  modalHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: 22, borderTopRightRadius: 22, overflow: 'hidden', maxHeight: '88%' },
+  container: { flex: 1 },
+  catRow: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+  catBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, borderWidth: 1.5 },
+  list: { padding: 16, paddingTop: 4 },
+  sellBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 },
+  itemHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  itemTitle: { fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  itemDesc: { fontSize: 14, lineHeight: 20, marginBottom: 10 },
+  itemMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  itemPrice: { fontSize: 18, fontWeight: '800' },
+  itemActions: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#eee', paddingTop: 10, gap: 20 },
+  actionBtn: { flexDirection: 'row', alignItems: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalInput: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15 },
+  condBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5 },
 });

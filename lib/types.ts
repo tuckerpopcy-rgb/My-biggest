@@ -1,30 +1,6 @@
-export type LanguageCode =
-  | 'en'
-  | 'kri'
-  | 'men'
-  | 'tem'
-  | 'lma'
-  | 'kno'
-  | 'ful'
-  | 'man'
-  | 'lok'
-  | 'she';
-
-export type ThemeMode = 'light' | 'dark' | 'system';
-
-export type AccentName =
-  | 'flag'
-  | 'gold'
-  | 'ocean'
-  | 'forest'
-  | 'sunset'
-  | 'royal'
-  | 'ember'
-  | 'aurora'
-  | 'diamond'
-  | 'mango'
-  | 'harbour'
-  | 'krioNight';
+// ============================================================
+// Salon na we yon - Core Type Definitions
+// ============================================================
 
 export interface User {
   id: string;
@@ -34,113 +10,64 @@ export interface User {
   displayName: string;
   bio: string;
   avatar: string | null;
-  coverImage: string | null;
-  introVideo: string | null;
-  location: string;
-  tribe: string;
-  language: LanguageCode;
-  createdAt: number;
-  isDeveloper: boolean;
-  isPremium: boolean;
-  premiumUntil: number | null;
-  verified: boolean;
-  lastSeen: number;
-  phone: string;
+  coverPhoto: string | null;
   points: number;
-}
-
-export interface Comment {
-  id: string;
-  userId: string;
-  content: string;
-  createdAt: number;
+  followers: string[];
+  following: string[];
+  isSubscribed: boolean;
+  subscriptionTier: 'free' | 'basic' | 'premium';
+  subscriptionExpiry: number | null;
+  isDeveloper: boolean;
+  approvedClasses: string[];
+  joinedAt: number;
+  lastActive: number;
+  quizHighScore: number;
+  quizzesCompleted: number;
 }
 
 export interface Post {
   id: string;
-  userId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string | null;
   content: string;
   image: string | null;
-  video: string | null;
-  mediaPath: string | null;
   likes: string[];
   comments: Comment[];
   createdAt: number;
-  updatedAt: number;
-  boosted: boolean;
+  tags: string[];
 }
 
-export type ListingCategory =
-  | 'food'
-  | 'fashion'
-  | 'electronics'
-  | 'agriculture'
-  | 'services'
-  | 'crafts'
-  | 'transport'
-  | 'property'
-  | 'other';
-
-export interface Listing {
+export interface Comment {
   id: string;
-  userId: string;
-  title: string;
-  description: string;
-  price: number;
-  currency: string;
-  category: ListingCategory;
-  image: string | null;
-  location: string;
-  status: 'available' | 'sold';
-  createdAt: number;
-  updatedAt: number;
-  boosted: boolean;
-}
-
-export interface Conversation {
-  id: string;
-  participants: string[];
-  lastMessageAt: number;
-  lastMessage: string;
-}
-
-export interface Message {
-  id: string;
-  conversationId: string;
-  senderId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string | null;
   content: string;
   createdAt: number;
-  updatedAt?: number;
-  read: boolean;
-  kind: 'text' | 'quiz' | 'image' | 'video';
-  media?: string | null;
-  quizPayload?: {
-    question: string;
-    options: string[];
-    answerIndex: number;
-  };
+  likes: string[];
 }
 
-export type NotificationType =
-  | 'like'
-  | 'comment'
-  | 'message'
-  | 'follow'
-  | 'system'
-  | 'market'
-  | 'quiz'
-  | 'video'
-  | 'academy';
-
-export interface AppNotification {
+export interface Notification {
   id: string;
-  userId: string;
-  type: NotificationType;
+  type: 'update' | 'like' | 'comment' | 'follow' | 'subscription' | 'quiz' | 'system' | 'market';
   title: string;
-  body: string;
+  message: string;
+  fromUserId: string | null;
+  fromUserName: string | null;
   read: boolean;
   createdAt: number;
-  relatedId?: string;
+  data?: any;
+}
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+  category: string;
+  difficulty: 'easy' | 'medium' | 'hard';
 }
 
 export interface QuizResult {
@@ -149,115 +76,130 @@ export interface QuizResult {
   score: number;
   total: number;
   category: string;
-  createdAt: number;
+  completedAt: number;
 }
 
-export interface Follow {
-  followerId: string;
-  followingId: string;
-  createdAt: number;
-}
-
-export interface SavedItem {
-  userId: string;
-  postId: string;
-  createdAt: number;
-}
-
-export interface CloudVideo {
+export interface Course {
   id: string;
-  userId: string;
-  postId: string | null;
-  path: string;
-  publicUrl: string;
-  caption: string;
+  title: string;
+  description: string;
+  instructor: string;
+  tier: 'basic' | 'premium';
+  lessons: Lesson[];
+  icon: string;
+  color: string;
+  category: string;
+}
+
+export interface Lesson {
+  id: string;
+  title: string;
+  content: string;
+  questions: AIQuestion[];
+}
+
+export interface AIQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export interface ChatRoom {
+  id: string;
+  name: string;
+  type: 'voice' | 'video' | 'text';
+  participants: string[];
   createdAt: number;
+  active: boolean;
+  description: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  roomId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string | null;
+  content: string;
+  type: 'text' | 'voice' | 'video' | 'system';
+  createdAt: number;
+}
+
+export interface Theme {
+  id: string;
+  name: string;
+  isPremium: boolean;
+  colors: {
+    primary: string;
+    primaryDark: string;
+    primaryLight: string;
+    accent: string;
+    background: string;
+    surface: string;
+    surfaceAlt: string;
+    text: string;
+    textSecondary: string;
+    textMuted: string;
+    border: string;
+    error: string;
+    success: string;
+    warning: string;
+    gradientStart: string;
+    gradientEnd: string;
+  };
+  effects: {
+    glow: boolean;
+    particles: boolean;
+    shimmer: boolean;
+    blur: boolean;
+  };
 }
 
 export interface AppSettings {
-  themeMode: ThemeMode;
-  accent: AccentName;
-  language: LanguageCode;
-  haptics: boolean;
-  clickSounds: boolean;
-  notifications: boolean;
-  glow: boolean;
-  uiScale: 'compact' | 'normal' | 'large';
-  fitMode: 'phone' | 'tablet' | 'fill';
+  themeId: string;
+  uiScale: number;
+  fontScale: number;
+  reducedMotion: boolean;
+  hapticsEnabled: boolean;
+  notificationsEnabled: boolean;
+  soundEnabled: boolean;
 }
 
-export interface PointRules {
-  like: number;
-  comment: number;
-  follow: number;
-  post: number;
-  video: number;
-  cap: number;
-  enabled: boolean;
-}
-
-export type CourseId = 'forex' | 'office' | 'software';
-
-export type ApplicationStatus = 'awaiting_payment' | 'paid_pending' | 'approved' | 'rejected';
-
-export interface StudyApplication {
+// ===== Market Types =====
+export interface MarketItem {
   id: string;
-  userId: string;
-  fullName: string;
-  phone: string;
-  reason: string;
-  subjects: CourseId[];
-  status: ApplicationStatus;
-  createdAt: number;
-  updatedAt: number;
-  paymentId: string | null;
-  reviewedBy: string | null;
-  reviewNote: string;
-}
-
-export interface ClassPayment {
-  id: string;
-  applicationId: string;
-  userId: string;
-  amount: number;
-  currency: string;
-  method: 'orange_money';
-  orangeNumber: string;
-  senderNumber: string;
-  reference: string;
-  createdAt: number;
-}
-
-export interface LessonTurn {
-  id: string;
-  userId: string;
-  subject: CourseId;
-  role: 'student' | 'teacher';
-  text: string;
-  createdAt: number;
-}
-
-export interface DeveloperProfile {
-  name: string;
+  sellerId: string;
+  sellerName: string;
+  sellerAvatar: string | null;
   title: string;
-  bio: string;
+  description: string;
+  price: number;
+  currency: string;
+  category: string;
   image: string | null;
-  email: string;
   location: string;
-  updatedAt: number;
+  condition: 'new' | 'used' | 'refurbished';
+  createdAt: number;
+  likes: string[];
+  sold: boolean;
+  views: number;
 }
 
-export interface Session {
-  userId: string;
-  issuedAt: number;
-}
-
-export interface ProfileDraft {
-  displayName: string;
-  bio: string;
-  location: string;
-  tribe: string;
-  avatar: string | null;
-  coverImage: string | null;
-  introVideo: string | null;
+// ===== News Types =====
+export interface NewsArticle {
+  id: string;
+  title: string;
+  summary: string;
+  content: string;
+  category: string;
+  author: string;
+  image: string | null;
+  createdAt: number;
+  likes: string[];
+  comments: Comment[];
+  source: string;
+  isFeatured: boolean;
+  views: number;
 }

@@ -1,292 +1,353 @@
-import React from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+// ============================================================
+// Salon na we yon - Main Application
+// Sierra Leone is Ours 🇸🇱
+// Developed by Henry Tucker
+// ============================================================
+
+import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { useFonts } from 'expo-font';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import { StyleSheet, View, Text, TouchableOpacity, Platform } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppProvider, useApp } from './context/AppContext';
-import TutorialScreen from './screens/TutorialScreen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useFonts } from 'expo-font';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+
+import { AppProvider, useApp } from './lib/context';
+import { authService } from './lib/auth';
+import { getUnreadCount } from './lib/notifications';
+
+// Screens
 import AuthScreen from './screens/AuthScreen';
-import FeedScreen from './screens/FeedScreen';
-import MarketScreen from './screens/MarketScreen';
-import MessagesScreen from './screens/MessagesScreen';
-import ChatScreen from './screens/ChatScreen';
+import HomeScreen from './screens/HomeScreen';
+import ExploreScreen from './screens/ExploreScreen';
 import QuizScreen from './screens/QuizScreen';
-import AIScreen from './screens/AIScreen';
+import TeachScreen from './screens/TeachScreen';
+import ChatScreen from './screens/ChatScreen';
+import MarketScreen from './screens/MarketScreen';
+import NewsScreen from './screens/NewsScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import SettingsScreen from './screens/SettingsScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
-import AboutDeveloperScreen from './screens/AboutDeveloperScreen';
-import UserProfileScreen from './screens/UserProfileScreen';
-import PremiumScreen from './screens/PremiumScreen';
-import StudioScreen from './screens/StudioScreen';
-import AcademyScreen from './screens/AcademyScreen';
-import ClassroomScreen from './screens/ClassroomScreen';
-import AcademyAdminScreen from './screens/AcademyAdminScreen';
+import PostDetailScreen from './screens/PostDetailScreen';
+import NewsDetailScreen from './screens/NewsDetailScreen';
+import DeveloperPortal from './screens/DeveloperPortal';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function Tabs() {
-  const { palette, t, unreadCount } = useApp();
-  const insets = useSafeAreaInsets();
-  const unread = unreadCount();
-  const bottom = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 6);
+// ===== TAB NAVIGATOR =====
+function MainTabs() {
+  const { user, theme } = useApp();
+  const c = theme.colors;
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const count = await getUnreadCount();
+      setUnreadCount(count);
+    }, 5000);
+    getUnreadCount().then(setUnreadCount);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarHideOnKeyboard: Platform.OS === 'android',
-        tabBarActiveTintColor: palette.primary,
-        tabBarInactiveTintColor: palette.muted,
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName: string = '';
+          let IconComponent: any = Ionicons;
+
+          switch (route.name) {
+            case 'Home':
+              iconName = focused ? 'home' : 'home-outline';
+              break;
+            case 'News':
+              iconName = focused ? 'newspaper' : 'newspaper-outline';
+              break;
+            case 'Market':
+              IconComponent = MaterialIcons;
+              iconName = focused ? 'storefront' : 'storefront';
+              break;
+            case 'Quiz':
+              IconComponent = FontAwesome;
+              iconName = 'trophy';
+              size = focused ? size + 1 : size;
+              break;
+            case 'Chat':
+              iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
+              break;
+          }
+
+          return <IconComponent name={iconName as any} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: c.primary,
+        tabBarInactiveTintColor: c.textMuted,
         tabBarStyle: {
-          backgroundColor: palette.tabBar,
-          borderTopColor: palette.border,
-          height: 56 + bottom,
-          paddingBottom: bottom,
-          paddingTop: 6,
+          backgroundColor: c.surface,
+          borderTopColor: c.border,
+          borderTopWidth: 1,
+          paddingBottom: Platform.OS === 'ios' ? 20 : 6,
+          paddingTop: 4,
+          height: Platform.OS === 'ios' ? 82 : 60,
           elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 8,
         },
-        tabBarLabelStyle: { fontWeight: '700', fontSize: 11 },
-        tabBarIcon: ({ color, size, focused }) => {
-          const map: Record<string, keyof typeof Ionicons.glyphMap> = {
-            FeedTab: focused ? 'home' : 'home-outline',
-            MarketTab: focused ? 'storefront' : 'storefront-outline',
-            MessagesTab: focused ? 'chatbubbles' : 'chatbubbles-outline',
-            AcademyTab: focused ? 'school' : 'school-outline',
-            ProfileTab: focused ? 'person' : 'person-outline',
-          };
-          return <Ionicons name={map[route.name] || 'ellipse'} size={size} color={color} />;
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '600',
+          marginTop: -1,
         },
+        headerShown: false,
       })}
     >
-      <Tab.Screen name="FeedTab" component={FeedScreen} options={{ title: t('feed') }} />
-      <Tab.Screen name="MarketTab" component={MarketScreen} options={{ title: t('market') }} />
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="News" component={NewsScreen} />
+      <Tab.Screen name="Market" component={MarketScreen} />
       <Tab.Screen
-        name="MessagesTab"
-        component={MessagesScreen}
-        options={{ title: t('messages'), tabBarBadge: unread > 0 ? unread : undefined }}
+        name="Quiz"
+        component={QuizScreen}
+        options={{
+          tabBarBadge: user?.quizHighScore > 0 ? `${user.quizHighScore}` : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: c.accent,
+            fontSize: 9,
+            minWidth: 16,
+            height: 16,
+            borderRadius: 8,
+          },
+        }}
       />
-      <Tab.Screen name="AcademyTab" component={AcademyScreen} options={{ title: t('academy') }} />
-      <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: t('profile') }} />
+      <Tab.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: c.error,
+            fontSize: 9,
+            minWidth: 16,
+            height: 16,
+            borderRadius: 8,
+          },
+        }}
+      />
     </Tab.Navigator>
   );
 }
 
-function GlowWash() {
-  const { palette, settings } = useApp();
-  if (!settings.glow) return null;
+// ===== STACK NAVIGATOR =====
+function AppStack() {
+  const { user, theme, refreshUser } = useApp();
+  const c = theme.colors;
+
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View style={[styles.glowA, { backgroundColor: palette.primary }]} />
-      <View style={[styles.glowB, { backgroundColor: palette.accent }]} />
-    </View>
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: c.surface,
+        },
+        headerTintColor: c.text,
+        headerShadowVisible: false,
+        contentStyle: {
+          backgroundColor: c.background,
+        },
+      }}
+    >
+      {/* Main Tabs */}
+      <Stack.Screen
+        name="MainTabs"
+        component={MainTabs}
+        options={{ headerShown: false }}
+      />
+
+      {/* Profile */}
+      <Stack.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="UserProfile"
+        component={ProfileScreen}
+        options={{ headerShown: false }}
+      />
+
+      {/* Settings with LARGE Developer Symbol */}
+      <Stack.Screen
+        name="Settings"
+        options={({ navigation }) => ({
+          headerTitle: 'Settings',
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('DeveloperPortal')}
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 16,
+                backgroundColor: c.primary + '18',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: 6,
+                borderWidth: 2.5,
+                borderColor: c.primary + '50',
+                shadowColor: c.primary,
+                shadowOpacity: 0.3,
+                shadowRadius: 6,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 4,
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.6}
+            >
+              <Text style={{ fontSize: 22 }}>⚙️</Text>
+              <Text style={{ fontSize: 7, fontWeight: '800', color: c.primary, letterSpacing: 0.5 }}>DEV</Text>
+            </TouchableOpacity>
+          ),
+        })}
+      >
+        {(props) => <SettingsScreen {...props} onDevAccess={() => props.navigation.navigate('DeveloperPortal')} />}
+      </Stack.Screen>
+
+      {/* Notifications */}
+      <Stack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ headerTitle: 'Notifications' }}
+      />
+
+      {/* Post Detail */}
+      <Stack.Screen
+        name="PostDetail"
+        component={PostDetailScreen}
+        options={{ headerShown: false }}
+      />
+
+      {/* News Detail */}
+      <Stack.Screen
+        name="NewsDetail"
+        component={NewsDetailScreen}
+        options={{ headerShown: false }}
+      />
+
+      {/* Learn / Teach */}
+      <Stack.Screen
+        name="Teach"
+        component={TeachScreen}
+        options={{ headerShown: false }}
+      />
+
+      {/* Developer Portal */}
+      <Stack.Screen
+        name="DeveloperPortal"
+        component={DeveloperPortal}
+        options={{ headerShown: false }}
+      />
+    </Stack.Navigator>
   );
 }
 
-function RootNav() {
-  const { ready, user, tutorialSeen, palette, dark, t } = useApp();
+// ===== AUTH WRAPPER =====
+function AuthWrapper() {
+  const { user, loading, theme } = useApp();
+  const c = theme.colors;
 
-  if (!ready) {
+  if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: palette.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={palette.primary} size="large" />
+      <View style={[styles.loadingContainer, { backgroundColor: c.background }]}>
+        <View style={[styles.loadingLogo, { backgroundColor: c.primary }]}>
+          <Text style={styles.loadingEmoji}>🇸🇱</Text>
+        </View>
+        <Text style={[styles.loadingTitle, { color: c.text }]}>Salon na we yon</Text>
+        <Text style={[styles.loadingSubtitle, { color: c.textSecondary }]}>Loading your experience...</Text>
       </View>
     );
   }
 
-  const navTheme = {
-    ...(dark ? DarkTheme : DefaultTheme),
-    colors: {
-      ...(dark ? DarkTheme.colors : DefaultTheme.colors),
-      background: palette.bg,
-      card: palette.card,
-      text: palette.text,
-      border: palette.border,
-      primary: palette.primary,
-    },
-  };
+  if (!user) {
+    return <AuthScreen onLogin={() => {}} />;
+  }
 
-  const gate = !tutorialSeen ? 'tutorial' : user ? 'app' : 'auth';
+  return <AppStack />;
+}
+
+// ===== ROOT APP =====
+export default function App() {
+  const [fontsLoaded] = useFonts({
+    ...Ionicons.font,
+    ...FontAwesome.font,
+    ...MaterialIcons.font,
+  });
+
+  if (!fontsLoaded) {
+    return null;
+  }
 
   return (
-    <NavigationContainer key={gate} theme={navTheme}>
-      <GlowWash />
-      <StatusBar style={dark ? 'light' : 'dark'} />
-      <Stack.Navigator
-        screenOptions={{
-          headerStyle: { backgroundColor: palette.header },
-          headerTintColor: palette.text,
-          headerTitleStyle: { fontWeight: '800' },
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: palette.bg },
-        }}
-      >
-        {!tutorialSeen ? (
-          <Stack.Screen name="Tutorial" component={TutorialScreen} options={{ headerShown: false }} />
-        ) : !user ? (
-          <>
-            <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="AboutDeveloper" component={AboutDeveloperScreen} options={{ title: t('aboutDev') }} />
-            <Stack.Screen name="AcademyAdmin" component={AcademyAdminScreen} options={{ title: 'Academy desk' }} />
-          </>
-        ) : (
-          <>
-            <Stack.Screen name="Main" component={Tabs} options={{ headerShown: false }} />
-            <Stack.Screen name="SalonAI" component={AIScreen} options={{ title: t('salonAI') }} />
-            <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('settings') }} />
-            <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: t('notifications') }} />
-            <Stack.Screen name="AboutDeveloper" component={AboutDeveloperScreen} options={{ title: t('aboutDev') }} />
-            <Stack.Screen name="UserProfile" component={UserProfileScreen} options={{ title: t('profile') }} />
-            <Stack.Screen name="Premium" component={PremiumScreen} options={{ title: t('premium') }} />
-            <Stack.Screen name="Studio" component={StudioScreen} options={{ title: t('studio') }} />
-            <Stack.Screen name="Academy" component={AcademyScreen} options={{ title: t('academy') }} />
-            <Stack.Screen name="Classroom" component={ClassroomScreen} options={{ title: t('classroom') }} />
-            <Stack.Screen name="AcademyAdmin" component={AcademyAdminScreen} options={{ title: 'Academy desk' }} />
-            <Stack.Screen name="Quiz" component={QuizScreen} options={{ title: t('quiz') }} />
-            <Stack.Screen
-              name="Chat"
-              component={ChatScreen}
-              options={{ headerShown: false }}
-            />
-          </>
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <AppProvider>
+        <NavigationContainer
+          theme={{
+            dark: false,
+            colors: {
+              primary: '#007A3D',
+              background: '#F5FFF5',
+              card: '#FFFFFF',
+              text: '#1B5E20',
+              border: '#C8E6C9',
+              notification: '#CE1126',
+            },
+            fonts: {
+              regular: { fontFamily: 'System', fontWeight: '400' },
+              medium: { fontFamily: 'System', fontWeight: '500' },
+              bold: { fontFamily: 'System', fontWeight: '700' },
+              heavy: { fontFamily: 'System', fontWeight: '900' },
+            },
+          }}
+        >
+          <StatusBar style="auto" />
+          <AuthWrapper />
+        </NavigationContainer>
+      </AppProvider>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  webStage: {
+  loadingContainer: {
     flex: 1,
-    backgroundColor: '#07140C',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  phone: {
-    width: '100%',
-    maxWidth: 412,
-    flex: 1,
-    overflow: 'hidden',
-    alignSelf: 'center',
+  loadingLogo: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  installBar: {
-    position: 'absolute',
-    top: 10,
-    zIndex: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
+  loadingEmoji: {
+    fontSize: 50,
   },
-  glowA: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    top: -70,
-    right: -50,
-    opacity: 0.14,
+  loadingTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.5,
   },
-  glowB: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    bottom: 80,
-    left: -60,
-    opacity: 0.1,
+  loadingSubtitle: {
+    fontSize: 15,
+    marginTop: 8,
   },
 });
-
-export default function App() {
-  const [fontsLoaded] = useFonts({
-    ...Ionicons.font,
-  });
-
-  if (!fontsLoaded) return null;
-
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <AppProvider>
-          <PhoneShell>
-            <RootNav />
-          </PhoneShell>
-        </AppProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
-  );
-}
-
-function PhoneShell({ children }: { children: React.ReactNode }) {
-  const { settings, updateSettings, tap, palette } = useApp();
-  const [installEvt, setInstallEvt] = React.useState<any>(null);
-  const [installed, setInstalled] = React.useState(false);
-
-  React.useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const onPrompt = (e: Event) => {
-      e.preventDefault();
-      setInstallEvt(e);
-    };
-    const onInstalled = () => {
-      setInstalled(true);
-      setInstallEvt(null);
-    };
-    window.addEventListener('beforeinstallprompt', onPrompt as EventListener);
-    window.addEventListener('appinstalled', onInstalled);
-    if ((window.navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches) {
-      setInstalled(true);
-    }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onPrompt as EventListener);
-      window.removeEventListener('appinstalled', onInstalled);
-    };
-  }, []);
-
-  const width =
-    settings.fitMode === 'fill' ? '100%' : settings.fitMode === 'tablet' ? 768 : 412;
-  const scale = settings.uiScale === 'compact' ? 0.92 : settings.uiScale === 'large' ? 1.08 : 1;
-
-  const frame = (
-    <View style={[styles.phone, { maxWidth: width as any, transform: [{ scale }] }]}>
-      {children}
-    </View>
-  );
-
-  if (Platform.OS !== 'web') return <>{children}</>;
-
-  return (
-    <View style={styles.webStage}>
-      {!installed ? (
-        <Pressable
-          onPress={async () => {
-            tap();
-            if (installEvt?.prompt) {
-              installEvt.prompt();
-              try {
-                await installEvt.userChoice;
-              } catch {
-                /* ignore */
-              }
-              setInstallEvt(null);
-            }
-          }}
-          style={[styles.installBar, { backgroundColor: palette.primary }]}
-        >
-          <Text style={{ color: palette.primaryText, fontWeight: '800' }}>
-            {installEvt ? 'Install Salone Na We Yon' : 'Add Salone Na We Yon to your home screen'}
-          </Text>
-        </Pressable>
-      ) : null}
-      {frame}
-    </View>
-  );
-}

@@ -1,268 +1,289 @@
+// ============================================================
+// Salon na we yon - Settings Screen
+// Theme picker, UI size controls, app configuration
+// ============================================================
+
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, Switch, Alert, Slider,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { useApp } from '../context/AppContext';
-import { Button, Card, ConfirmSheet, FlagBar } from '../components/UI';
-import { LANGUAGES } from '../lib/i18n';
-import { ACCENT_OPTIONS } from '../lib/theme';
-import { AccentName, LanguageCode, ThemeMode } from '../lib/types';
+import { useApp } from '../lib/context';
+import { themes, isThemeUnlocked } from '../lib/themes';
+import { authService } from '../lib/auth';
+import { Card, GradientHeader, Badge, Button } from '../components/UIComponents';
+import { DeveloperSymbol } from '../components/DeveloperSymbol';
+import Ionicons from '@expo/vector-icons/Ionicons';
 
-export default function SettingsScreen() {
-  const nav = useNavigation<any>();
-  const { palette, t, settings, updateSettings, tap, buzz, isPremium, logout } = useApp();
-  const [outAsk, setOutAsk] = useState(false);
-  const [outBusy, setOutBusy] = useState(false);
+export default function SettingsScreen({ navigation, onDevAccess }: any) {
+  const { user, theme, settings, setSettings, setTheme, refreshUser } = useApp();
+  const c = theme.colors;
+  const [showThemes, setShowThemes] = useState(false);
 
-  const setTheme = (mode: ThemeMode) => {
-    tap();
-    updateSettings({ themeMode: mode });
+  const handleLogout = () => {
+    Alert.alert(
+      'Confirm Logout',
+      'Are you sure you want to logout? Your account and data will be preserved for next login.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await authService.logout();
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDevAccess = () => {
+    if (onDevAccess) onDevAccess();
+    else navigation?.navigate('DeveloperPortal');
   };
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: palette.bg }]} edges={['bottom']}>
-      <FlagBar />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <Text style={{ color: palette.muted, marginBottom: 12 }}>{t('settingsSaved')}</Text>
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-          <Button title={isPremium() ? t('premiumLive') : t('goPremium')} icon="diamond" onPress={() => nav.navigate('Premium')} style={{ flex: 1 }} />
-          <Button title={t('studio')} icon="videocam" variant="soft" onPress={() => nav.navigate('Studio')} style={{ flex: 1 }} />
-        </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
+      <GradientHeader theme={theme} title="Settings" subtitle="Customize your experience" />
 
-        <Label color={palette.muted}>{t('theme')}</Label>
-        <Card style={{ flexDirection: 'row', gap: 8 }}>
-          {(['light', 'dark', 'system'] as ThemeMode[]).map((m) => (
-            <Pressable
-              key={m}
-              onPress={() => setTheme(m)}
-              style={[
-                styles.seg,
-                {
-                  backgroundColor: settings.themeMode === m ? palette.primary : palette.bgAlt,
-                },
-              ]}
-            >
-              <Text
-                style={{
-                  color: settings.themeMode === m ? palette.primaryText : palette.text,
-                  fontWeight: '800',
-                  fontSize: 13,
-                }}
-              >
-                {t(m)}
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+        {/* Profile Quick Access */}
+        <Card theme={theme} onPress={() => navigation?.navigate('Profile')}>
+          <View style={styles.profileRow}>
+            <View style={[styles.profileAvatar, { backgroundColor: c.primary }]}>
+              <Text style={{ fontSize: 24, color: '#fff', fontWeight: '700' }}>
+                {user?.displayName?.[0] || '?'}
               </Text>
-            </Pressable>
-          ))}
-        </Card>
-
-        <Label color={palette.muted}>Screen fit</Label>
-        <Card style={{ flexDirection: 'row', gap: 8 }}>
-          {(['phone', 'tablet', 'fill'] as const).map((m) => (
-            <Pressable
-              key={m}
-              onPress={() => {
-                tap();
-                updateSettings({ fitMode: m });
-              }}
-              style={[styles.seg, { backgroundColor: settings.fitMode === m ? palette.primary : palette.bgAlt }]}
-            >
-              <Text style={{ color: settings.fitMode === m ? palette.primaryText : palette.text, fontWeight: '800', fontSize: 12 }}>
-                {m === 'phone' ? 'Phone' : m === 'tablet' ? 'Tablet' : 'Fill'}
-              </Text>
-            </Pressable>
-          ))}
-        </Card>
-
-        <Label color={palette.muted}>Text size</Label>
-        <Card style={{ flexDirection: 'row', gap: 8 }}>
-          {(['compact', 'normal', 'large'] as const).map((m) => (
-            <Pressable
-              key={m}
-              onPress={() => {
-                tap();
-                updateSettings({ uiScale: m });
-              }}
-              style={[styles.seg, { backgroundColor: settings.uiScale === m ? palette.primary : palette.bgAlt }]}
-            >
-              <Text style={{ color: settings.uiScale === m ? palette.primaryText : palette.text, fontWeight: '800', fontSize: 12 }}>
-                {m === 'compact' ? 'Small' : m === 'large' ? 'Large' : 'Normal'}
-              </Text>
-            </Pressable>
-          ))}
-        </Card>
-
-        <Label color={palette.muted}>{t('accent')}</Label>
-        <Card>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-            {ACCENT_OPTIONS.map((a) => (
-              <Pressable
-                key={a.key}
-                onPress={() => {
-                  tap();
-                  updateSettings({ accent: a.key as AccentName });
-                }}
-                style={{ alignItems: 'center', width: 86 }}
-              >
-                <View
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    backgroundColor: a.color,
-                    borderWidth: settings.accent === a.key ? 3 : 0,
-                    borderColor: palette.text,
-                  }}
-                />
-                <Text style={{ color: palette.muted, fontSize: 11, marginTop: 4, textAlign: 'center' }}>{a.label}</Text>
-              </Pressable>
-            ))}
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={{ fontSize: 17, fontWeight: '700', color: c.text }}>{user?.displayName}</Text>
+              <Text style={{ fontSize: 13, color: c.textMuted }}>@{user?.username} · {user?.points} pts</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={22} color={c.textMuted} />
           </View>
         </Card>
 
-        <Label color={palette.muted}>{t('language')}</Label>
-        <Card>
-          {LANGUAGES.map((l) => {
-            const active = settings.language === l.code;
-            return (
-              <Pressable
-                key={l.code}
-                onPress={() => {
-                  tap();
-                  updateSettings({ language: l.code as LanguageCode });
-                }}
-                style={[styles.lang, { borderBottomColor: palette.border }]}
-              >
-                <View>
-                  <Text style={{ color: palette.text, fontWeight: '800' }}>{l.native}</Text>
-                  <Text style={{ color: palette.muted, fontSize: 12 }}>{l.name} · {l.tribe}</Text>
-                </View>
-                <View
-                  style={{
-                    width: 18,
-                    height: 18,
-                    borderRadius: 9,
-                    borderWidth: 2,
-                    borderColor: active ? palette.primary : palette.border,
-                    backgroundColor: active ? palette.primary : 'transparent',
-                  }}
-                />
-              </Pressable>
-            );
-          })}
+        {/* ===== THEMES SECTION ===== */}
+        <Card theme={theme}>
+          <TouchableOpacity onPress={() => setShowThemes(!showThemes)} activeOpacity={0.8}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="color-palette" size={22} color={c.primary} />
+              <Text style={{ fontSize: 17, fontWeight: '700', color: c.text, flex: 1, marginLeft: 10 }}>Themes & Colors</Text>
+              <Ionicons name={showThemes ? 'chevron-up' : 'chevron-down'} size={20} color={c.textMuted} />
+            </View>
+          </TouchableOpacity>
+
+          {showThemes && (
+            <View style={{ marginTop: 12, gap: 8 }}>
+              {themes.map(t => {
+                const isActive = t.id === settings.themeId;
+                const unlocked = isThemeUnlocked(t.id, user?.isSubscribed || false);
+                return (
+                  <TouchableOpacity
+                    key={t.id}
+                    onPress={() => unlocked && setTheme(t.id)}
+                    disabled={!unlocked}
+                    style={[
+                      styles.themeItem,
+                      {
+                        backgroundColor: isActive ? t.colors.primary + '15' : c.surfaceAlt,
+                        borderColor: isActive ? t.colors.primary : c.border,
+                        opacity: unlocked ? 1 : 0.5,
+                      },
+                    ]}
+                  >
+                    <View style={styles.themeColors}>
+                      <View style={[styles.colorDot, { backgroundColor: t.colors.primary }]} />
+                      <View style={[styles.colorDot, { backgroundColor: t.colors.accent }]} />
+                      <View style={[styles.colorDot, { backgroundColor: t.colors.gradientStart }]} />
+                      <View style={[styles.colorDot, { backgroundColor: t.colors.gradientEnd }]} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={{ fontSize: 15, fontWeight: '600', color: c.text }}>{t.name}</Text>
+                        {t.isPremium && <Badge theme={theme} text="PREMIUM" color="#FFD700" size="small" />}
+                      </View>
+                      <Text style={{ fontSize: 12, color: c.textMuted, marginTop: 2 }}>
+                        {t.effects.glow ? '✨ Glow' : ''}
+                        {t.effects.particles ? ' ✦ Particles' : ''}
+                        {t.effects.shimmer ? ' ≋ Shimmer' : ''}
+                        {t.effects.blur ? ' ◎ Blur' : ''}
+                        {!t.effects.glow && !t.effects.particles && !t.effects.shimmer && !t.effects.blur ? 'Standard' : ''}
+                      </Text>
+                    </View>
+                    {isActive ? (
+                      <Ionicons name="checkmark-circle" size={22} color={t.colors.primary} />
+                    ) : !unlocked ? (
+                      <Ionicons name="lock-closed" size={18} color={c.textMuted} />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </Card>
 
-        <Label color={palette.muted}>Feedback</Label>
-        <Card>
-          <Row
-            label={t('haptics')}
-            value={settings.haptics}
-            on={palette.primary}
-            color={palette.text}
-            onChange={(v) => {
-              updateSettings({ haptics: v });
-              if (v) buzz('success');
-            }}
-          />
-          <Row
-            label={t('clickSounds')}
-            value={settings.clickSounds}
-            on={palette.primary}
-            color={palette.text}
-            onChange={(v) => updateSettings({ clickSounds: v })}
-          />
-          <Row
-            label={t('realtimeNotifs')}
-            value={settings.notifications}
-            on={palette.primary}
-            color={palette.text}
-            onChange={(v) => updateSettings({ notifications: v })}
-          />
-          <Row
-            label={t('glow')}
-            value={!!settings.glow}
-            on={palette.primary}
-            color={palette.text}
-            onChange={(v) => updateSettings({ glow: v })}
-          />
+        {/* ===== UI SIZE CONTROLS ===== */}
+        <Card theme={theme}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="resize" size={22} color={c.primary} />
+            <Text style={{ fontSize: 17, fontWeight: '700', color: c.text, marginLeft: 10 }}>UI Size Controls</Text>
+          </View>
+
+          <View style={{ marginTop: 16, gap: 16 }}>
+            <View>
+              <View style={styles.sliderLabel}>
+                <Text style={{ fontSize: 14, color: c.textSecondary }}>Interface Scale</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: c.text }}>{Math.round(settings.uiScale * 100)}%</Text>
+              </View>
+              <Slider
+                minimumValue={0.8}
+                maximumValue={1.4}
+                step={0.05}
+                value={settings.uiScale}
+                onValueChange={(v) => setSettings({ uiScale: v })}
+                minimumTrackTintColor={c.primary}
+                maximumTrackTintColor={c.border}
+                thumbTintColor={c.primary}
+              />
+            </View>
+
+            <View>
+              <View style={styles.sliderLabel}>
+                <Text style={{ fontSize: 14, color: c.textSecondary }}>Font Scale</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: c.text }}>{Math.round(settings.fontScale * 100)}%</Text>
+              </View>
+              <Slider
+                minimumValue={0.8}
+                maximumValue={1.5}
+                step={0.05}
+                value={settings.fontScale}
+                onValueChange={(v) => setSettings({ fontScale: v })}
+                minimumTrackTintColor={c.primary}
+                maximumTrackTintColor={c.border}
+                thumbTintColor={c.primary}
+              />
+            </View>
+          </View>
         </Card>
 
-        <Button
-          title={t('logout')}
-          variant="danger"
-          onPress={() => {
-            tap();
-            setOutAsk(true);
-          }}
-          style={{ marginTop: 22 }}
-        />
-        <Text style={{ color: palette.muted, marginTop: 18, fontSize: 12, lineHeight: 18 }}>
-          Theme, language, haptics, click sounds and notifications apply instantly across the whole app.
-          Your session stays signed in until you log out. Accounts are permanent. Logging out never deletes your registration.
+        {/* ===== PREFERENCES ===== */}
+        <Card theme={theme}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="options" size={22} color={c.primary} />
+            <Text style={{ fontSize: 17, fontWeight: '700', color: c.text, marginLeft: 10 }}>Preferences</Text>
+          </View>
+
+          <View style={{ marginTop: 12, gap: 12 }}>
+            <View style={styles.toggleRow}>
+              <Text style={{ fontSize: 15, color: c.text, flex: 1 }}>Haptic Feedback</Text>
+              <Switch
+                value={settings.hapticsEnabled}
+                onValueChange={(v) => setSettings({ hapticsEnabled: v })}
+                trackColor={{ true: c.primary + '44', false: c.border }}
+                thumbColor={settings.hapticsEnabled ? c.primary : '#999'}
+              />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <Text style={{ fontSize: 15, color: c.text, flex: 1 }}>Notifications</Text>
+              <Switch
+                value={settings.notificationsEnabled}
+                onValueChange={(v) => setSettings({ notificationsEnabled: v })}
+                trackColor={{ true: c.primary + '44', false: c.border }}
+                thumbColor={settings.notificationsEnabled ? c.primary : '#999'}
+              />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <Text style={{ fontSize: 15, color: c.text, flex: 1 }}>Sound Effects</Text>
+              <Switch
+                value={settings.soundEnabled}
+                onValueChange={(v) => setSettings({ soundEnabled: v })}
+                trackColor={{ true: c.primary + '44', false: c.border }}
+                thumbColor={settings.soundEnabled ? c.primary : '#999'}
+              />
+            </View>
+
+            <View style={styles.toggleRow}>
+              <Text style={{ fontSize: 15, color: c.text, flex: 1 }}>Reduced Motion</Text>
+              <Switch
+                value={settings.reducedMotion}
+                onValueChange={(v) => setSettings({ reducedMotion: v })}
+                trackColor={{ true: c.primary + '44', false: c.border }}
+                thumbColor={settings.reducedMotion ? c.primary : '#999'}
+              />
+            </View>
+          </View>
+        </Card>
+
+        {/* ===== DEVELOPER PORTAL ACCESS ===== */}
+        <Card theme={theme}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="code-slash" size={22} color={c.accent} />
+            <Text style={{ fontSize: 17, fontWeight: '700', color: c.text, marginLeft: 10 }}>Developer Portal</Text>
+          </View>
+          <View style={{ marginTop: 16, alignItems: 'center' }}>
+            <DeveloperSymbol onAccess={handleDevAccess} />
+            <Text style={{ fontSize: 13, color: c.textSecondary, marginTop: 12, textAlign: 'center', fontWeight: '600' }}>
+              Tap the ⚙️ symbol to access the developer portal
+            </Text>
+            <Text style={{ fontSize: 11, color: c.textMuted, marginTop: 4, textAlign: 'center' }}>
+              Only Henry Tucker has access. Code required.
+            </Text>
+          </View>
+        </Card>
+
+        {/* ===== ABOUT ===== */}
+        <Card theme={theme}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="information-circle" size={22} color={c.primary} />
+            <Text style={{ fontSize: 17, fontWeight: '700', color: c.text, marginLeft: 10 }}>About</Text>
+          </View>
+          <View style={{ marginTop: 12, gap: 8 }}>
+            <View style={styles.aboutRow}>
+              <Text style={{ fontSize: 14, color: c.textSecondary }}>App Name</Text>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: c.text }}>Salon na we yon</Text>
+            </View>
+            <View style={styles.aboutRow}>
+              <Text style={{ fontSize: 14, color: c.textSecondary }}>Version</Text>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: c.text }}>1.0.0</Text>
+            </View>
+            <View style={styles.aboutRow}>
+              <Text style={{ fontSize: 14, color: c.textSecondary }}>Developer</Text>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: c.primary }}>Henry Tucker</Text>
+            </View>
+            <View style={styles.aboutRow}>
+              <Text style={{ fontSize: 14, color: c.textSecondary }}>Meaning</Text>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: c.text }}>Sierra Leone is Ours 🇸🇱</Text>
+            </View>
+          </View>
+        </Card>
+
+        {/* Logout */}
+        <Button theme={theme} title="Logout" variant="danger" onPress={handleLogout} size="large" />
+
+        <Text style={{ textAlign: 'center', fontSize: 12, color: c.textMuted, paddingVertical: 8 }}>
+          Made with ❤️ in Sierra Leone by Henry Tucker
         </Text>
       </ScrollView>
-      <ConfirmSheet
-        visible={outAsk}
-        title={t('confirmLogout')}
-        body={t('confirmLogoutBody')}
-        confirmLabel={t('yesLogout')}
-        cancelLabel={t('cancel')}
-        danger
-        busy={outBusy}
-        onCancel={() => {
-          if (!outBusy) setOutAsk(false);
-        }}
-        onConfirm={async () => {
-          if (outBusy) return;
-          setOutBusy(true);
-          try {
-            await logout();
-          } finally {
-            setOutBusy(false);
-            setOutAsk(false);
-          }
-        }}
-      />
     </SafeAreaView>
   );
 }
 
-function Label({ children, color }: { children: string; color: string }) {
-  return (
-    <Text style={{ color, fontWeight: '800', fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 16, marginBottom: 8 }}>
-      {children}
-    </Text>
-  );
-}
-
-function Row({
-  label,
-  value,
-  onChange,
-  on,
-  color,
-}: {
-  label: string;
-  value: boolean;
-  onChange: (v: boolean) => void;
-  on: string;
-  color: string;
-}) {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
-      <Text style={{ fontWeight: '700', fontSize: 15, color }}>{label}</Text>
-      <Switch value={value} onValueChange={onChange} trackColor={{ true: on }} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  seg: { flex: 1, paddingVertical: 10, borderRadius: 12, alignItems: 'center' },
-  lang: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  container: { flex: 1 },
+  profileRow: { flexDirection: 'row', alignItems: 'center' },
+  profileAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center' },
+  themeItem: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 12,
+    paddingHorizontal: 14, borderRadius: 12, borderWidth: 1.5,
   },
+  themeColors: { flexDirection: 'row', gap: 4 },
+  colorDot: { width: 20, height: 20, borderRadius: 10 },
+  sliderLabel: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  aboutRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });

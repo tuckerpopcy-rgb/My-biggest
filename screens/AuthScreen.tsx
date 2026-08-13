@@ -1,230 +1,207 @@
+// ============================================================
+// Salon na we yon - Authentication Screen
+// Real login only - No demo accounts
+// ============================================================
+
 import React, { useState } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+  View, Text, TextInput, TouchableOpacity,
+  StyleSheet, KeyboardAvoidingView, Platform,
+  ScrollView, Alert, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
-import { useNavigation } from '@react-navigation/native';
-import { useApp } from '../context/AppContext';
-import { Button, Field, FlagBar } from '../components/UI';
-import { LANGUAGES } from '../lib/i18n';
+import { authService } from '../lib/auth';
+import { db } from '../lib/database';
+import { getTheme } from '../lib/themes';
 
-export default function AuthScreen() {
-  const nav = useNavigation<any>();
-  const { palette, t, login, register, settings, updateSettings, tap } = useApp();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [username, setUsername] = useState('');
+export default function AuthScreen({ onLogin }: { onLogin: () => void }) {
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [location, setLocation] = useState('');
-  const [tribe, setTribe] = useState('');
-  const [phone, setPhone] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const submit = async () => {
-    setErr('');
-    setBusy(true);
-    try {
-      if (mode === 'login') {
-        const res = await login(username, password);
-        if (!res.ok) setErr(res.error || t('invalidLogin'));
-      } else {
-        const res = await register({
-          username,
-          email,
-          password,
-          displayName,
-          location,
-          tribe,
-          phone,
-        });
-        if (!res.ok) setErr(res.error || t('fillAll'));
+  const theme = getTheme('sierra_leone');
+  const c = theme.colors;
+
+  const handleSubmit = async () => {
+    setError('');
+
+    if (isLogin) {
+      if (!email.trim() || !password.trim()) {
+        setError('Please fill in all fields.');
+        return;
       }
-    } finally {
-      setBusy(false);
+      setLoading(true);
+      const result = await authService.login(email.trim(), password);
+      setLoading(false);
+      if (result.success) {
+        onLogin();
+      } else {
+        setError(result.error || 'Login failed.');
+      }
+    } else {
+      if (!email.trim() || !username.trim() || !password.trim() || !displayName.trim()) {
+        setError('Please fill in all fields.');
+        return;
+      }
+      if (username.trim().toLowerCase().includes('demo') || username.trim().toLowerCase().includes('test')) {
+        setError('Invalid username. Please use a real username - no demo or test accounts.');
+        return;
+      }
+      setLoading(true);
+      const result = await authService.register(
+        username.trim(),
+        email.trim(),
+        password,
+        displayName.trim()
+      );
+      setLoading(false);
+      if (result.success) {
+        Alert.alert(
+          'Welcome! 🎉',
+          'Your account has been created. You received 100 bonus points! Start exploring Salon na we yon.',
+          [{ text: 'Let\'s Go!', onPress: onLogin }]
+        );
+      } else {
+        setError(result.error || 'Registration failed.');
+      }
     }
   };
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: palette.bg }]}>
-      <FlagBar />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.brand}>
-            <Image source={require('../assets/salon-logo.png')} style={styles.logo} contentFit="cover" />
-            <Text style={[styles.name, { color: palette.text }]}>{t('appName')}</Text>
-            <Text style={{ color: palette.muted, textAlign: 'center', marginTop: 6 }}>{t('tagline')}</Text>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.background }]}>
+      <StatusBar style="dark" />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+          {/* Logo & Title */}
+          <View style={styles.logoSection}>
+            <View style={[styles.logoCircle, { backgroundColor: c.primary }]}>
+              <Text style={styles.logoEmoji}>🇸🇱</Text>
+            </View>
+            <Text style={[styles.appName, { color: c.text }]}>Salon na we yon</Text>
+            <Text style={[styles.appTagline, { color: c.textSecondary }]}>Sierra Leone is Ours</Text>
+            <View style={[styles.divider, { backgroundColor: c.border }]} />
+            <Text style={[styles.appDesc, { color: c.textMuted }]}>
+              Connect, Learn, Earn & Grow together
+            </Text>
           </View>
 
-          <View style={[styles.card, { backgroundColor: palette.card, borderColor: palette.border }]}>
-            <Text style={[styles.h, { color: palette.text }]}>
-              {mode === 'login' ? t('login') : t('register')}
-            </Text>
-            <Text style={{ color: palette.muted, marginBottom: 14, fontSize: 13 }}>
-              {mode === 'register'
-                ? 'Permanent registration. Real people only. No demo accounts.'
-                : 'Sign in with your real account. Session stays until you log out.'}
+          {/* Form */}
+          <View style={styles.form}>
+            <Text style={[styles.formTitle, { color: c.text }]}>
+              {isLogin ? 'Welcome Back' : 'Create Account'}
             </Text>
 
-            <Field
-              label={t('username')}
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="next"
-              placeholder={mode === 'login' ? 'username or email' : 'choose a username'}
-            />
-            {mode === 'register' ? (
+            {!isLogin && (
               <>
-                <Field
-                  label={t('email')}
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  returnKeyType="next"
-                  placeholder="you@email.com"
-                />
-                <Field
-                  label={t('displayName')}
+                <TextInput
+                  style={[styles.input, { backgroundColor: c.surfaceAlt, color: c.text, borderColor: c.border }]}
+                  placeholder="Display Name"
+                  placeholderTextColor={c.textMuted}
                   value={displayName}
                   onChangeText={setDisplayName}
-                  returnKeyType="next"
-                  placeholder="Your name"
+                  autoCapitalize="words"
                 />
-                <Field
-                  label={t('location')}
-                  value={location}
-                  onChangeText={setLocation}
-                  returnKeyType="next"
-                  placeholder="Freetown, Bo, Kenema…"
-                />
-                <Field
-                  label={t('tribe')}
-                  value={tribe}
-                  onChangeText={setTribe}
-                  returnKeyType="next"
-                  placeholder="Temne, Mende, Krio…"
-                />
-                <Field
-                  label={t('phone')}
-                  value={phone}
-                  onChangeText={setPhone}
-                  keyboardType="phone-pad"
-                  returnKeyType="next"
-                  placeholder="+232…"
+                <TextInput
+                  style={[styles.input, { backgroundColor: c.surfaceAlt, color: c.text, borderColor: c.border }]}
+                  placeholder="Username"
+                  placeholderTextColor={c.textMuted}
+                  value={username}
+                  onChangeText={setUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
               </>
-            ) : null}
-            <Field
-              label={t('password')}
+            )}
+
+            <TextInput
+              style={[styles.input, { backgroundColor: c.surfaceAlt, color: c.text, borderColor: c.border }]}
+              placeholder={isLogin ? 'Email or Username' : 'Email'}
+              placeholderTextColor={c.textMuted}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <TextInput
+              style={[styles.input, { backgroundColor: c.surfaceAlt, color: c.text, borderColor: c.border }]}
+              placeholder="Password"
+              placeholderTextColor={c.textMuted}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
-              returnKeyType="done"
-              onSubmitEditing={submit}
-              placeholder="••••••••"
+              autoCapitalize="none"
             />
 
-            {err ? <Text style={{ color: palette.danger, marginBottom: 10, fontWeight: '600' }}>{err}</Text> : null}
+            {error ? (
+              <Text style={[styles.error, { color: c.error }]}>{error}</Text>
+            ) : null}
 
-            <Button title={mode === 'login' ? t('login') : t('register')} onPress={submit} loading={busy} />
+            <TouchableOpacity
+              style={[styles.submitBtn, { backgroundColor: c.primary }]}
+              onPress={handleSubmit}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.submitText}>
+                {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
+              </Text>
+            </TouchableOpacity>
 
-            <Button
-              title={mode === 'login' ? t('newAccount') : t('haveAccount')}
-              variant="ghost"
-              onPress={() => {
-                setMode(mode === 'login' ? 'register' : 'login');
-                setErr('');
-              }}
-              style={{ marginTop: 8 }}
-            />
+            <TouchableOpacity
+              onPress={() => { setIsLogin(!isLogin); setError(''); }}
+              style={styles.switchBtn}
+            >
+              <Text style={[styles.switchText, { color: c.primary }]}>
+                {isLogin ? "Don't have an account? Register" : 'Already have an account? Sign In'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          <Text style={[styles.langLabel, { color: palette.muted }]}>{t('language')}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {LANGUAGES.map((l) => {
-              const active = settings.language === l.code;
-              return (
-                <PressLang
-                  key={l.code}
-                  active={active}
-                  label={l.native}
-                  sub={l.tribe}
-                  onPress={() => {
-                    tap();
-                    updateSettings({ language: l.code });
-                  }}
-                />
-              );
-            })}
-          </ScrollView>
-
-          <Pressable
-            onPress={() => {
-              tap();
-              nav.navigate('AboutDeveloper');
-            }}
-            style={styles.aboutLink}
-          >
-            <Text style={{ color: palette.muted, fontSize: 13, fontWeight: '600' }}>{t('aboutDev')}</Text>
-          </Pressable>
+          <Text style={[styles.footer, { color: c.textMuted }]}>
+            By Henry Tucker · v1.0.0
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function PressLang({
-  active,
-  label,
-  sub,
-  onPress,
-}: {
-  active: boolean;
-  label: string;
-  sub: string;
-  onPress: () => void;
-}) {
-  const { palette } = useApp();
-  return (
-    <Text
-      onPress={onPress}
-      style={{
-        overflow: 'hidden',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 12,
-        backgroundColor: active ? palette.primary : palette.card,
-        color: active ? palette.primaryText : palette.text,
-        fontWeight: '700',
-        borderWidth: 1,
-        borderColor: active ? palette.primary : palette.border,
-        marginBottom: 4,
-      }}
-    >
-      {label} · {sub}
-    </Text>
-  );
-}
-
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { padding: 20, paddingBottom: 40 },
-  brand: { alignItems: 'center', marginBottom: 22, marginTop: 8 },
-  logo: { width: 84, height: 84, borderRadius: 22 },
-  name: { fontSize: 28, fontWeight: '900', marginTop: 12, letterSpacing: -0.6 },
-  card: { borderRadius: 20, padding: 16, borderWidth: 1 },
-  h: { fontSize: 22, fontWeight: '900', marginBottom: 4 },
-  langLabel: { marginTop: 20, marginBottom: 8, fontWeight: '700', fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase' },
-  aboutLink: { marginTop: 28, alignItems: 'center', paddingVertical: 10 },
+  container: { flex: 1 },
+  scrollContent: { flexGrow: 1, padding: 24, justifyContent: 'center' },
+  logoSection: { alignItems: 'center', marginBottom: 32 },
+  logoCircle: {
+    width: 88, height: 88, borderRadius: 44,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+  },
+  logoEmoji: { fontSize: 44 },
+  appName: { fontSize: 28, fontWeight: '900', letterSpacing: -0.5 },
+  appTagline: { fontSize: 16, fontWeight: '600', marginTop: 4 },
+  divider: { width: 60, height: 2, marginTop: 12, marginBottom: 12, borderRadius: 1 },
+  appDesc: { fontSize: 13 },
+  form: { marginBottom: 24 },
+  formTitle: { fontSize: 22, fontWeight: '800', marginBottom: 20 },
+  input: {
+    borderWidth: 1.5, borderRadius: 14, paddingHorizontal: 18,
+    paddingVertical: 16, fontSize: 16, marginBottom: 14,
+  },
+  error: { fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  submitBtn: {
+    borderRadius: 14, paddingVertical: 18, alignItems: 'center',
+    marginTop: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+  },
+  submitText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  switchBtn: { alignItems: 'center', marginTop: 16, paddingVertical: 8 },
+  switchText: { fontSize: 14, fontWeight: '600' },
+  footer: { textAlign: 'center', fontSize: 12, marginTop: 8 },
 });
