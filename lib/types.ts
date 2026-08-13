@@ -46,6 +46,7 @@ export interface User {
   verified: boolean;
   lastSeen: number;
   phone: string;
+  points: number;
 }
 
 export interface Comment {
@@ -181,6 +182,18 @@ export interface AppSettings {
   clickSounds: boolean;
   notifications: boolean;
   glow: boolean;
+  uiScale: 'compact' | 'normal' | 'large';
+  fitMode: 'phone' | 'tablet' | 'fill';
+}
+
+export interface PointRules {
+  like: number;
+  comment: number;
+  follow: number;
+  post: number;
+  video: number;
+  cap: number;
+  enabled: boolean;
 }
 
 export type CourseId = 'forex' | 'office' | 'software';

@@ -16,6 +16,7 @@ import {
   StudyApplication,
   ClassPayment,
   LessonTurn,
+  PointRules,
 } from './types';
 import { readFlags, readSession, writeFlags, writeSession } from './session';
 
@@ -40,6 +41,7 @@ export interface Database {
   developer: DeveloperProfile;
   session: Session | null;
   tutorialSeen: boolean;
+  pointRules: PointRules;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -50,6 +52,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   clickSounds: true,
   notifications: true,
   glow: true,
+  uiScale: 'normal',
+  fitMode: 'phone',
+};
+
+export const DEFAULT_POINT_RULES: PointRules = {
+  like: 5,
+  comment: 10,
+  follow: 15,
+  post: 20,
+  video: 30,
+  cap: 2500,
+  enabled: true,
 };
 
 export const DEFAULT_DEVELOPER: DeveloperProfile = {
@@ -83,6 +97,7 @@ function hydrateUser(u: Partial<User> & { id: string; username: string; email: s
     verified: !!u.verified || !!u.isDeveloper || !!u.isPremium,
     lastSeen: u.lastSeen || Date.now(),
     phone: u.phone || '',
+    points: typeof u.points === 'number' ? u.points : 0,
   };
   return merged;
 }
@@ -140,6 +155,7 @@ function empty(): Database {
     developer: { ...DEFAULT_DEVELOPER },
     session: null,
     tutorialSeen: false,
+    pointRules: { ...DEFAULT_POINT_RULES },
   };
 }
 
@@ -171,6 +187,7 @@ export function snapshot(): Database {
     settings: { ...memory.settings },
     developer: { ...memory.developer },
     session: memory.session ? { ...memory.session } : null,
+    pointRules: { ...DEFAULT_POINT_RULES, ...(memory.pointRules || {}) },
   };
 }
 
@@ -211,6 +228,7 @@ function normalize(parsed: Partial<Database>): Database {
     lessons: parsed.lessons || [],
     session: parsed.session || null,
     tutorialSeen: !!parsed.tutorialSeen,
+    pointRules: { ...DEFAULT_POINT_RULES, ...(parsed.pointRules || {}) },
   };
 }
 
@@ -226,11 +244,10 @@ export async function initDB(): Promise<Database> {
     }
     const locked = await readSession();
     const flags = await readFlags();
-    if (locked && memory.users.some((u) => u.id === locked.userId)) {
+    if (locked && locked.userId && memory.users.some((u) => u.id === locked.userId)) {
       memory.session = locked;
     } else {
       memory.session = null;
-      if (locked) await writeSession(null);
     }
     if (flags.tutorialSeen || memory.tutorialSeen) {
       memory.tutorialSeen = true;

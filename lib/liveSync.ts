@@ -1,4 +1,5 @@
 import { Database, getDB, mutate } from './database';
+import { isPlayableUri } from './mediaVault';
 import {
   ClassPayment,
   CloudVideo,
@@ -86,6 +87,18 @@ export function packLive(db: Database): LivePayload {
 export function mergeLive(local: Database, remote: LivePayload): boolean {
   let changed = false;
 
+  const keepMedia = <T extends Record<string, unknown>>(local: T, remote: T): T => {
+    const next = { ...local, ...remote };
+    (['image', 'video', 'media', 'avatar', 'coverImage', 'introVideo', 'publicUrl'] as const).forEach((k) => {
+      const lv = local[k];
+      const rv = remote[k];
+      if (typeof lv === 'string' && isPlayableUri(lv) && typeof rv === 'string' && !isPlayableUri(rv)) {
+        (next as Record<string, unknown>)[k] = lv;
+      }
+    });
+    return next;
+  };
+
   const mergeById = <T extends { id: string }>(mine: T[], theirs: T[], stamp: (x: T) => number) => {
     const map = new Map(mine.map((x) => [x.id, x]));
     theirs.forEach((item) => {
@@ -93,8 +106,8 @@ export function mergeLive(local: Database, remote: LivePayload): boolean {
       if (!cur) {
         map.set(item.id, item);
         changed = true;
-      } else if (stamp(item) > stamp(cur)) {
-        map.set(item.id, { ...cur, ...item });
+      } else if (stamp(item) >= stamp(cur)) {
+        map.set(item.id, keepMedia(cur as T & Record<string, unknown>, item as T & Record<string, unknown>) as T);
         changed = true;
       }
     });

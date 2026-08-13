@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -7,7 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppProvider, useApp } from './context/AppContext';
 import TutorialScreen from './screens/TutorialScreen';
 import AuthScreen from './screens/AuthScreen';
@@ -33,19 +33,23 @@ const Tab = createBottomTabNavigator();
 
 function Tabs() {
   const { palette, t, unreadCount } = useApp();
+  const insets = useSafeAreaInsets();
   const unread = unreadCount();
+  const bottom = Math.max(insets.bottom, Platform.OS === 'android' ? 10 : 6);
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        tabBarHideOnKeyboard: Platform.OS === 'android',
         tabBarActiveTintColor: palette.primary,
         tabBarInactiveTintColor: palette.muted,
         tabBarStyle: {
           backgroundColor: palette.tabBar,
           borderTopColor: palette.border,
-          height: 62,
-          paddingBottom: 8,
+          height: 56 + bottom,
+          paddingBottom: bottom,
           paddingTop: 6,
+          elevation: 8,
         },
         tabBarLabelStyle: { fontWeight: '700', fontSize: 11 },
         tabBarIcon: ({ color, size, focused }) => {
@@ -128,6 +132,7 @@ function RootNav() {
           <>
             <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
             <Stack.Screen name="AboutDeveloper" component={AboutDeveloperScreen} options={{ title: t('aboutDev') }} />
+            <Stack.Screen name="AcademyAdmin" component={AcademyAdminScreen} options={{ title: 'Academy desk' }} />
           </>
         ) : (
           <>
@@ -156,6 +161,27 @@ function RootNav() {
 }
 
 const styles = StyleSheet.create({
+  webStage: {
+    flex: 1,
+    backgroundColor: '#07140C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  phone: {
+    width: '100%',
+    maxWidth: 412,
+    flex: 1,
+    overflow: 'hidden',
+    alignSelf: 'center',
+  },
+  installBar: {
+    position: 'absolute',
+    top: 10,
+    zIndex: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
   glowA: {
     position: 'absolute',
     width: 220,
@@ -187,9 +213,80 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AppProvider>
-          <RootNav />
+          <PhoneShell>
+            <RootNav />
+          </PhoneShell>
         </AppProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+function PhoneShell({ children }: { children: React.ReactNode }) {
+  const { settings, updateSettings, tap, palette } = useApp();
+  const [installEvt, setInstallEvt] = React.useState<any>(null);
+  const [installed, setInstalled] = React.useState(false);
+
+  React.useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallEvt(e);
+    };
+    const onInstalled = () => {
+      setInstalled(true);
+      setInstallEvt(null);
+    };
+    window.addEventListener('beforeinstallprompt', onPrompt as EventListener);
+    window.addEventListener('appinstalled', onInstalled);
+    if ((window.navigator as any).standalone || window.matchMedia('(display-mode: standalone)').matches) {
+      setInstalled(true);
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onPrompt as EventListener);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const width =
+    settings.fitMode === 'fill' ? '100%' : settings.fitMode === 'tablet' ? 768 : 412;
+  const scale = settings.uiScale === 'compact' ? 0.92 : settings.uiScale === 'large' ? 1.08 : 1;
+
+  const frame = (
+    <View style={[styles.phone, { maxWidth: width as any, transform: [{ scale }] }]}>
+      {children}
+    </View>
+  );
+
+  if (Platform.OS !== 'web') return <>{children}</>;
+
+  return (
+    <View style={styles.webStage}>
+      {!installed ? (
+        <Pressable
+          onPress={async () => {
+            tap();
+            if (installEvt?.prompt) {
+              installEvt.prompt();
+              try {
+                await installEvt.userChoice;
+              } catch {
+                /* ignore */
+              }
+              setInstallEvt(null);
+            }
+          }}
+          style={[styles.installBar, { backgroundColor: palette.primary }]}
+        >
+          <Text style={{ color: palette.primaryText, fontWeight: '800' }}>
+            {installEvt ? 'Install Salone Na We Yon' : 'Add Salone Na We Yon to your home screen'}
+          </Text>
+        </Pressable>
+      ) : null}
+      {frame}
+    </View>
   );
 }

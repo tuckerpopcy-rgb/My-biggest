@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -15,17 +15,22 @@ import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
-import { Button, Card, FlagBar } from '../components/UI';
+import { Button, Card, Field, FlagBar } from '../components/UI';
 import { VaultImage } from '../components/VaultImage';
+import { getSupabaseCfg, saveSupabaseCfg } from '../lib/supabase';
 
 export default function AboutDeveloperScreen() {
   const nav = useNavigation<any>();
-  const { palette, t, developer, user, updateDeveloper, tap, buzz, developerLogin } = useApp();
+  const { palette, t, developer, user, updateDeveloper, tap, buzz, developerLogin, pointRules, updatePointRules } = useApp();
   const canEdit = !!user?.isDeveloper;
   const [gate, setGate] = useState(false);
   const [digits, setDigits] = useState('');
   const [wrong, setWrong] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [sbUrl, setSbUrl] = useState(getSupabaseCfg().url);
+  const [sbKey, setSbKey] = useState(getSupabaseCfg().anon);
+  const taps = useRef(0);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const upload = async () => {
     if (!canEdit) {
@@ -45,7 +50,6 @@ export default function AboutDeveloperScreen() {
   };
 
   const openGate = () => {
-    tap();
     if (canEdit) {
       buzz('success');
       return;
@@ -53,6 +57,19 @@ export default function AboutDeveloperScreen() {
     setDigits('');
     setWrong(false);
     setGate(true);
+  };
+
+  const onHiddenSymbol = () => {
+    tap();
+    taps.current += 1;
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    tapTimer.current = setTimeout(() => {
+      taps.current = 0;
+    }, 900);
+    if (taps.current >= 3) {
+      taps.current = 0;
+      openGate();
+    }
   };
 
   const pressDigit = async (d: string) => {
@@ -68,6 +85,7 @@ export default function AboutDeveloperScreen() {
       if (res.ok) {
         setGate(false);
         setDigits('');
+        buzz('success');
       } else {
         setWrong(true);
         setDigits('');
@@ -84,7 +102,7 @@ export default function AboutDeveloperScreen() {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: palette.bg }]} edges={['bottom']}>
       <FlagBar />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 56 }} keyboardShouldPersistTaps="handled">
         <Card style={{ alignItems: 'center', paddingVertical: 22 }}>
           <Pressable onPress={canEdit ? upload : undefined}>
             {developer.image ? (
@@ -120,17 +138,45 @@ export default function AboutDeveloperScreen() {
           <>
             <Button title={t('uploadDevPhoto')} icon="image" onPress={upload} style={{ marginTop: 16 }} />
             <Button title="Academy desk" icon="school" variant="soft" onPress={() => { tap(); nav.navigate('AcademyAdmin'); }} style={{ marginTop: 8 }} />
+            <Card style={{ marginTop: 14 }}>
+              <Text style={{ color: palette.text, fontWeight: '800', marginBottom: 6 }}>Points rules</Text>
+              <Text style={{ color: palette.muted, marginBottom: 10, lineHeight: 20 }}>
+                Likes, comments and follows earn points up to your cap (set 2000 or more).
+              </Text>
+              <Field label="Like" value={String(pointRules.like)} onChangeText={(v) => updatePointRules({ like: Number(v) || 0 })} keyboardType="numeric" />
+              <Field label="Comment" value={String(pointRules.comment)} onChangeText={(v) => updatePointRules({ comment: Number(v) || 0 })} keyboardType="numeric" />
+              <Field label="Follow" value={String(pointRules.follow)} onChangeText={(v) => updatePointRules({ follow: Number(v) || 0 })} keyboardType="numeric" />
+              <Field label="Cap" value={String(pointRules.cap)} onChangeText={(v) => updatePointRules({ cap: Number(v) || 2000 })} keyboardType="numeric" />
+            </Card>
+            <Card style={{ marginTop: 14 }}>
+              <Text style={{ color: palette.text, fontWeight: '800', marginBottom: 8 }}>Supabase video lane</Text>
+              <Text style={{ color: palette.muted, marginBottom: 10, lineHeight: 20 }}>
+                Paste your project URL and anon key. Videos upload to bucket salon-media and stay live across platforms.
+              </Text>
+              <Field label="Project URL" value={sbUrl} onChangeText={setSbUrl} autoCapitalize="none" />
+              <Field label="Anon key" value={sbKey} onChangeText={setSbKey} autoCapitalize="none" />
+              <Button
+                title="Save cloud lane"
+                onPress={async () => {
+                  await saveSupabaseCfg({ url: sbUrl.trim(), anon: sbKey.trim() });
+                  buzz('success');
+                  Alert.alert('Saved', 'Video uploads will use this Supabase project while you are online.');
+                }}
+              />
+            </Card>
           </>
-        ) : (
-          <Text style={{ color: palette.muted, marginTop: 16, textAlign: 'center', lineHeight: 20 }}>
-            Henry Tucker built Salone Na We Yon. His portrait and tools appear here once he is signed in.
-          </Text>
-        )}
+        ) : null}
 
         <View style={styles.hiddenWrap}>
-          <Pressable onLongPress={openGate} delayLongPress={600} hitSlop={12} style={styles.hiddenHit}>
-            <View style={[styles.tinyLion, { borderColor: palette.border }]}>
-              <View style={[styles.tinyDot, { backgroundColor: palette.border }]} />
+          <Pressable
+            onPress={openGate}
+            onLongPress={openGate}
+            delayLongPress={280}
+            hitSlop={12}
+            style={styles.hiddenHit}
+          >
+            <View style={[styles.tinyLion, { borderColor: palette.muted }]}>
+              <View style={[styles.tinyDot, { backgroundColor: palette.primary }]} />
             </View>
           </Pressable>
         </View>
@@ -138,8 +184,11 @@ export default function AboutDeveloperScreen() {
 
       <Modal visible={gate} transparent animationType="fade" onRequestClose={() => setGate(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Pressable style={styles.veil} onPress={() => setGate(false)}>
-            <Pressable style={[styles.pad, { backgroundColor: palette.card, borderColor: palette.border }]} onPress={() => {}}>
+          <View style={styles.veil}>
+            <View style={[styles.pad, { backgroundColor: palette.card, borderColor: palette.border }]}>
+              <Pressable onPress={() => setGate(false)} style={{ alignSelf: 'flex-end', padding: 4 }}>
+                <Ionicons name="close" size={18} color={palette.muted} />
+              </Pressable>
               <View style={[styles.miniMark, { borderColor: palette.primary }]}>
                 <View style={[styles.tinyDot, { backgroundColor: palette.primary }]} />
               </View>
@@ -177,8 +226,8 @@ export default function AboutDeveloperScreen() {
                   );
                 })}
               </View>
-            </Pressable>
-          </Pressable>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
@@ -221,12 +270,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hiddenWrap: { alignItems: 'center', marginTop: 28, marginBottom: 8, opacity: 0.45 },
-  hiddenHit: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
-  tinyLion: { width: 14, height: 14, borderRadius: 7, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  tinyDot: { width: 4, height: 4, borderRadius: 2 },
+  hiddenWrap: { alignItems: 'center', marginTop: 28, marginBottom: 28 },
+  hiddenHit: { width: 88, height: 88, alignItems: 'center', justifyContent: 'center' },
+  tinyLion: { width: 56, height: 56, borderRadius: 28, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  tinyDot: { width: 18, height: 18, borderRadius: 9 },
   veil: { flex: 1, backgroundColor: 'rgba(6,16,10,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 },
-  pad: { width: 280, borderRadius: 22, borderWidth: 1, paddingVertical: 22, paddingHorizontal: 18, alignItems: 'center' },
+  pad: { width: 280, borderRadius: 22, borderWidth: 1, paddingVertical: 16, paddingHorizontal: 18, alignItems: 'center' },
   miniMark: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
   dots: { flexDirection: 'row', gap: 12, marginBottom: 4 },
   slot: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5 },

@@ -106,6 +106,10 @@ async function rememberMeta(id: string, kind: string, mime: string) {
   }
 }
 
+export function primePlayable(ref: string, uri: string) {
+  if (ref && uri) playCache.set(ref, uri);
+}
+
 export async function ingestMedia(uri: string, kind: 'video' | 'image' | 'avatar' | 'cover'): Promise<string> {
   if (!uri) return uri;
   if (isVaultRef(uri)) return uri;
@@ -113,6 +117,7 @@ export async function ingestMedia(uri: string, kind: 'video' | 'image' | 'avatar
 
   const id = newId(kind);
   playCache.set(id, uri);
+  playCache.set(uri, uri);
 
   const blob = await readBlob(uri);
   if (blob) {
@@ -122,17 +127,15 @@ export async function ingestMedia(uri: string, kind: 'video' | 'image' | 'avatar
       playCache.set(id, obj);
     }
     await rememberMeta(id, kind, blob.type || (kind === 'video' ? 'video/mp4' : 'image/jpeg'));
-  } else if (Platform.OS !== 'web') {
-    playCache.set(id, uri);
-    await rememberMeta(id, kind, kind === 'video' ? 'video/mp4' : 'image/jpeg');
-    try {
-      const raw = await AsyncStorage.getItem(META_KEY + '.native');
-      const map = raw ? (JSON.parse(raw) as Record<string, string>) : {};
-      map[id] = uri;
-      await AsyncStorage.setItem(META_KEY + '.native', JSON.stringify(map));
-    } catch {
-      /* ignore */
-    }
+  }
+
+  try {
+    const raw = await AsyncStorage.getItem(META_KEY + '.native');
+    const map = raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    map[id] = uri;
+    await AsyncStorage.setItem(META_KEY + '.native', JSON.stringify(map));
+  } catch {
+    /* ignore */
   }
 
   return id;

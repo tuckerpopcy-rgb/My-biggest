@@ -203,6 +203,7 @@ export default function ProfileScreen() {
                 <Stat n={followingCount(user.id)} l={t('following')} color={palette.text} muted={palette.muted} />
                 <Stat n={mine.length} l={t('post')} color={palette.text} muted={palette.muted} />
                 <Stat n={myVideos.length} l={t('videos')} color={palette.text} muted={palette.muted} />
+                <Stat n={user.points || 0} l="Points" color={palette.text} muted={palette.muted} />
               </View>
               {user.introVideo ? <SalonVideo uri={user.introVideo} height={180} autoPlay /> : null}
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>

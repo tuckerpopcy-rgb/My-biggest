@@ -49,7 +49,7 @@ export default function NotificationsScreen() {
             ]}
           >
             <View style={[styles.ic, { backgroundColor: palette.bgAlt }]}>
-              <Ionicons name={ICONS[item.type]} size={18} color={palette.primary} />
+              <Ionicons name={ICONS[item.type] || 'notifications'} size={18} color={palette.primary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ color: palette.text, fontWeight: '800' }}>{item.title}</Text>

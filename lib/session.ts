@@ -6,6 +6,7 @@ import { Session } from './types';
 export const SESSION_KEY = 'snwy.auth.session.v1';
 export const USERS_KEY = 'snwy.users.permanent.v1';
 export const FLAGS_KEY = 'snwy.flags.v1';
+export const SIGNOUT_KEY = 'snwy.auth.signedout.v1';
 
 async function safeGet(key: string): Promise<string | null> {
   if (Platform.OS !== 'web') {
@@ -58,12 +59,14 @@ async function safeDel(key: string): Promise<void> {
 }
 
 export async function readSession(): Promise<Session | null> {
+  const out = await safeGet(SIGNOUT_KEY);
+  if (out === '1') return null;
   const raw = await safeGet(SESSION_KEY);
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as Session;
-    if (!parsed?.userId) return null;
-    return parsed;
+    const parsed = JSON.parse(raw) as Session & { out?: boolean };
+    if (!parsed?.userId || parsed.out) return null;
+    return { userId: parsed.userId, issuedAt: parsed.issuedAt };
   } catch {
     return null;
   }
@@ -71,9 +74,12 @@ export async function readSession(): Promise<Session | null> {
 
 export async function writeSession(session: Session | null): Promise<void> {
   if (!session) {
+    await safeSet(SIGNOUT_KEY, '1');
+    await safeSet(SESSION_KEY, JSON.stringify({ userId: '', issuedAt: 0, out: true }));
     await safeDel(SESSION_KEY);
     return;
   }
+  await safeDel(SIGNOUT_KEY);
   const ok = await safeSet(SESSION_KEY, JSON.stringify(session));
   if (!ok) {
     try {

@@ -1,0 +1,25 @@
+{
+  "name": "Salone Na We Yon",
+  "short_name": "Salone Na We Yon",
+  "description": "Our Sierra Leone. Our people. Our market.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0A301C",
+  "theme_color": "#1B7A3D",
+  "icons": [
+    {
+      "src": "/salon-logo.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

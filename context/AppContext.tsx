@@ -28,6 +28,7 @@ import {
   QuizResult,
   SavedItem,
   StudyApplication,
+  PointRules,
   User,
 } from '../lib/types';
 import { hashPassword, now, uid, verifyPassword } from '../lib/hash';
@@ -46,8 +47,8 @@ import { getPalette, Palette } from '../lib/theme';
 import { t as translate } from '../lib/i18n';
 import { haptic, loadSounds, playClick, playNotify, playSuccess } from '../lib/sounds';
 import { pickOneQuiz } from '../lib/quiz';
-import { loadSupabaseCfg } from '../lib/supabase';
-import { ingestMedia } from '../lib/mediaVault';
+import { loadSupabaseCfg, uploadSalonMedia } from '../lib/supabase';
+import { ingestMedia, primePlayable } from '../lib/mediaVault';
 import { publishLive, startLiveSync } from '../lib/liveSync';
 import { ACADEMY_FEE, ORANGE_MONEY, askTeacher, openingLecture } from '../lib/teachAI';
 
@@ -149,6 +150,9 @@ interface AppContextValue {
   myApplication: () => StudyApplication | undefined;
   isAcademyApproved: (userId?: string) => boolean;
   askLecture: (subject: CourseId, question: string) => Promise<string>;
+  pointRules: PointRules;
+  updatePointRules: (patch: Partial<PointRules>) => Promise<void>;
+  userPoints: (userId?: string) => number;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -299,6 +303,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         verified: false,
         lastSeen: now(),
         phone: input.phone.trim(),
+        points: 0,
       };
       const session = { userId: nu.id, issuedAt: now() };
       signedUserId.current = nu.id;
@@ -382,6 +387,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           verified: true,
           lastSeen: now(),
           phone: '',
+          points: 0,
         };
         const session = { userId: (henry as User).id, issuedAt: now() };
         signedUserId.current = (henry as User).id;
@@ -427,16 +433,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     tap();
     signedUserId.current = null;
-    const snapshot = getDB();
-    if (snapshot.session) {
-      const u = snapshot.users.find((x) => x.id === snapshot.session?.userId);
-      if (u) u.lastSeen = now();
-    }
-    snapshot.session = null;
     await writeSession(null);
     await mutate((d) => {
+      if (d.session) {
+        const u = d.users.find((x) => x.id === d.session?.userId);
+        if (u) u.lastSeen = now();
+      }
       d.session = null;
     });
+    await writeSession(null);
   }, [tap]);
 
   const updateProfile = useCallback(async (patch: Partial<User>) => {
@@ -464,6 +469,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const award = (d: Database, userId: string, kind: 'like' | 'comment' | 'follow' | 'post' | 'video') => {
+    const rules = d.pointRules;
+    if (!rules?.enabled) return;
+    const gain = Number(rules[kind]) || 0;
+    if (gain <= 0) return;
+    const u = d.users.find((x) => x.id === userId);
+    if (!u) return;
+    const cap = rules.cap || 5000;
+    u.points = Math.min(cap, (u.points || 0) + gain);
+  };
+
   const createPost = useCallback(
     async (content: string, image?: string | null) => {
       await createMediaPost({ content, image: image || null, video: null });
@@ -480,6 +496,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const postId = uid('pst');
       const rawImage = input.image || null;
       const rawVideo = input.video || null;
+      if (rawImage) primePlayable(rawImage, rawImage);
+      if (rawVideo) primePlayable(rawVideo, rawVideo);
       await mutate((d) => {
         d.posts.unshift({
           id: postId,
@@ -504,14 +522,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             caption: text,
             createdAt: now(),
           });
+          award(d, user.id, 'video');
+        } else {
+          award(d, user.id, 'post');
         }
       });
       buzz('success');
       void (async () => {
         let image = rawImage;
         let video = rawVideo;
-        if (rawVideo) video = await ingestMedia(rawVideo, 'video');
-        else if (rawImage) image = await ingestMedia(rawImage, 'image');
+        if (rawVideo) {
+          const vault = await ingestMedia(rawVideo, 'video');
+          const cloud = await uploadSalonMedia(user.id, rawVideo, 'video');
+          video = cloud.url.startsWith('http') ? cloud.url : vault;
+          if (cloud.url.startsWith('http')) primePlayable(cloud.url, cloud.url);
+        } else if (rawImage) {
+          const vault = await ingestMedia(rawImage, 'image');
+          const cloud = await uploadSalonMedia(user.id, rawImage, 'image');
+          image = cloud.url.startsWith('http') ? cloud.url : vault;
+        }
         if (image === rawImage && video === rawVideo) return;
         await mutate((d) => {
           const p = d.posts.find((x) => x.id === postId);
@@ -544,7 +573,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!p) return;
         const i = p.likes.indexOf(user.id);
         if (i >= 0) p.likes.splice(i, 1);
-        else p.likes.push(user.id);
+        else {
+          p.likes.push(user.id);
+          if (p.userId !== user.id) award(d, user.id, 'like');
+        }
         p.updatedAt = now();
         if (p.userId !== user.id && p.likes.includes(user.id)) {
           const author = d.users.find((u) => u.id === p.userId);
@@ -581,7 +613,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
         p.comments.push(c);
         p.updatedAt = now();
-        if (p.userId !== user.id) notifyTo = p.userId;
+        if (p.userId !== user.id) {
+          notifyTo = p.userId;
+          award(d, user.id, 'comment');
+        }
       });
       if (notifyTo) {
         await pushNotif(
@@ -691,6 +726,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             createdAt: now(),
           });
           started = true;
+          award(d, user.id, 'follow');
         }
       });
       if (started) {
@@ -962,18 +998,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const saveProfile = useCallback(
     async (draft: ProfileDraft) => {
       if (!user) return;
-      let avatar = draft.avatar;
-      let coverImage = draft.coverImage;
-      let introVideo = draft.introVideo;
-      if (avatar && avatar !== user.avatar) {
-        avatar = await ingestMedia(avatar, 'avatar');
-      }
-      if (coverImage && coverImage !== user.coverImage) {
-        coverImage = await ingestMedia(coverImage, 'cover');
-      }
-      if (introVideo && introVideo !== user.introVideo) {
-        introVideo = await ingestMedia(introVideo, 'video');
-      }
+      const rawAvatar = draft.avatar;
+      const rawCover = draft.coverImage;
+      const rawIntro = draft.introVideo;
+      if (rawAvatar) primePlayable(rawAvatar, rawAvatar);
+      if (rawCover) primePlayable(rawCover, rawCover);
+      if (rawIntro) primePlayable(rawIntro, rawIntro);
       await mutate((d) => {
         const u = d.users.find((x) => x.id === user.id);
         if (!u) return;
@@ -981,16 +1011,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         u.bio = draft.bio;
         u.location = draft.location;
         u.tribe = draft.tribe;
-        u.avatar = avatar;
-        u.coverImage = coverImage;
-        u.introVideo = introVideo;
+        u.avatar = rawAvatar;
+        u.coverImage = rawCover;
+        u.introVideo = rawIntro;
         u.lastSeen = now();
-        if (u.isDeveloper && avatar) {
-          d.developer.image = avatar;
+        if (u.isDeveloper && rawAvatar) {
+          d.developer.image = rawAvatar;
           d.developer.updatedAt = now();
         }
       });
       buzz('success');
+      void (async () => {
+        let avatar = rawAvatar;
+        let coverImage = rawCover;
+        let introVideo = rawIntro;
+        if (rawAvatar && rawAvatar !== user.avatar) avatar = await ingestMedia(rawAvatar, 'avatar');
+        if (rawCover && rawCover !== user.coverImage) coverImage = await ingestMedia(rawCover, 'cover');
+        if (rawIntro && rawIntro !== user.introVideo) introVideo = await ingestMedia(rawIntro, 'video');
+        if (avatar === rawAvatar && coverImage === rawCover && introVideo === rawIntro) return;
+        await mutate((d) => {
+          const u = d.users.find((x) => x.id === user.id);
+          if (!u) return;
+          u.avatar = avatar;
+          u.coverImage = coverImage;
+          u.introVideo = introVideo;
+          if (u.isDeveloper && avatar) d.developer.image = avatar;
+        });
+      })();
     },
     [user, buzz]
   );
@@ -1227,6 +1274,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [db.applications, db.users, user?.id]
   );
 
+  const updatePointRules = useCallback(async (patch: Partial<PointRules>) => {
+    await mutate((d) => {
+      d.pointRules = { ...d.pointRules, ...patch };
+    });
+  }, []);
+
+  const userPoints = useCallback(
+    (userId?: string) => {
+      const id = userId || user?.id;
+      if (!id) return 0;
+      return db.users.find((x) => x.id === id)?.points || 0;
+    },
+    [db.users, user?.id]
+  );
+
   const askLecture = useCallback(
     async (subject: CourseId, question: string) => {
       if (!user || !isAcademyApproved()) return 'Classroom is locked until your application is approved.';
@@ -1325,6 +1387,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     myApplication,
     isAcademyApproved,
     askLecture,
+    pointRules: db.pointRules,
+    updatePointRules,
+    userPoints,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

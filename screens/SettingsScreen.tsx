@@ -55,6 +55,42 @@ export default function SettingsScreen() {
           ))}
         </Card>
 
+        <Label color={palette.muted}>Screen fit</Label>
+        <Card style={{ flexDirection: 'row', gap: 8 }}>
+          {(['phone', 'tablet', 'fill'] as const).map((m) => (
+            <Pressable
+              key={m}
+              onPress={() => {
+                tap();
+                updateSettings({ fitMode: m });
+              }}
+              style={[styles.seg, { backgroundColor: settings.fitMode === m ? palette.primary : palette.bgAlt }]}
+            >
+              <Text style={{ color: settings.fitMode === m ? palette.primaryText : palette.text, fontWeight: '800', fontSize: 12 }}>
+                {m === 'phone' ? 'Phone' : m === 'tablet' ? 'Tablet' : 'Fill'}
+              </Text>
+            </Pressable>
+          ))}
+        </Card>
+
+        <Label color={palette.muted}>Text size</Label>
+        <Card style={{ flexDirection: 'row', gap: 8 }}>
+          {(['compact', 'normal', 'large'] as const).map((m) => (
+            <Pressable
+              key={m}
+              onPress={() => {
+                tap();
+                updateSettings({ uiScale: m });
+              }}
+              style={[styles.seg, { backgroundColor: settings.uiScale === m ? palette.primary : palette.bgAlt }]}
+            >
+              <Text style={{ color: settings.uiScale === m ? palette.primaryText : palette.text, fontWeight: '800', fontSize: 12 }}>
+                {m === 'compact' ? 'Small' : m === 'large' ? 'Large' : 'Normal'}
+              </Text>
+            </Pressable>
+          ))}
+        </Card>
+
         <Label color={palette.muted}>{t('accent')}</Label>
         <Card>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
