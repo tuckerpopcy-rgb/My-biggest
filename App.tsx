@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -24,6 +24,9 @@ import AboutDeveloperScreen from './screens/AboutDeveloperScreen';
 import UserProfileScreen from './screens/UserProfileScreen';
 import PremiumScreen from './screens/PremiumScreen';
 import StudioScreen from './screens/StudioScreen';
+import AcademyScreen from './screens/AcademyScreen';
+import ClassroomScreen from './screens/ClassroomScreen';
+import AcademyAdminScreen from './screens/AcademyAdminScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -50,7 +53,7 @@ function Tabs() {
             FeedTab: focused ? 'home' : 'home-outline',
             MarketTab: focused ? 'storefront' : 'storefront-outline',
             MessagesTab: focused ? 'chatbubbles' : 'chatbubbles-outline',
-            QuizTab: focused ? 'help-circle' : 'help-circle-outline',
+            AcademyTab: focused ? 'school' : 'school-outline',
             ProfileTab: focused ? 'person' : 'person-outline',
           };
           return <Ionicons name={map[route.name] || 'ellipse'} size={size} color={color} />;
@@ -64,9 +67,20 @@ function Tabs() {
         component={MessagesScreen}
         options={{ title: t('messages'), tabBarBadge: unread > 0 ? unread : undefined }}
       />
-      <Tab.Screen name="QuizTab" component={QuizScreen} options={{ title: t('quiz') }} />
+      <Tab.Screen name="AcademyTab" component={AcademyScreen} options={{ title: t('academy') }} />
       <Tab.Screen name="ProfileTab" component={ProfileScreen} options={{ title: t('profile') }} />
     </Tab.Navigator>
+  );
+}
+
+function GlowWash() {
+  const { palette, settings } = useApp();
+  if (!settings.glow) return null;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View style={[styles.glowA, { backgroundColor: palette.primary }]} />
+      <View style={[styles.glowB, { backgroundColor: palette.accent }]} />
+    </View>
   );
 }
 
@@ -93,8 +107,11 @@ function RootNav() {
     },
   };
 
+  const gate = !tutorialSeen ? 'tutorial' : user ? 'app' : 'auth';
+
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer key={gate} theme={navTheme}>
+      <GlowWash />
       <StatusBar style={dark ? 'light' : 'dark'} />
       <Stack.Navigator
         screenOptions={{
@@ -122,6 +139,10 @@ function RootNav() {
             <Stack.Screen name="UserProfile" component={UserProfileScreen} options={{ title: t('profile') }} />
             <Stack.Screen name="Premium" component={PremiumScreen} options={{ title: t('premium') }} />
             <Stack.Screen name="Studio" component={StudioScreen} options={{ title: t('studio') }} />
+            <Stack.Screen name="Academy" component={AcademyScreen} options={{ title: t('academy') }} />
+            <Stack.Screen name="Classroom" component={ClassroomScreen} options={{ title: t('classroom') }} />
+            <Stack.Screen name="AcademyAdmin" component={AcademyAdminScreen} options={{ title: 'Academy desk' }} />
+            <Stack.Screen name="Quiz" component={QuizScreen} options={{ title: t('quiz') }} />
             <Stack.Screen
               name="Chat"
               component={ChatScreen}
@@ -133,6 +154,27 @@ function RootNav() {
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  glowA: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    top: -70,
+    right: -50,
+    opacity: 0.14,
+  },
+  glowB: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    bottom: 80,
+    left: -60,
+    opacity: 0.1,
+  },
+});
 
 export default function App() {
   const [fontsLoaded] = useFonts({

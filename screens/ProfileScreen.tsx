@@ -13,12 +13,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
+import { SalonVideo } from '../components/SalonVideo';
+import { VaultImage } from '../components/VaultImage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
-import { Avatar, Button, Card, Field, FlagBar } from '../components/UI';
+import { Avatar, Button, Card, ConfirmSheet, Field, FlagBar } from '../components/UI';
 import { timeAgo } from '../lib/hash';
 
 export default function ProfileScreen() {
@@ -47,6 +48,9 @@ export default function ProfileScreen() {
   const [intro, setIntro] = useState<string | null>(user?.introVideo || null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [outAsk, setOutAsk] = useState(false);
+  const [outBusy, setOutBusy] = useState(false);
+  const [leaveAsk, setLeaveAsk] = useState(false);
 
   useEffect(() => {
     if (edit && user && !dirty) {
@@ -122,10 +126,19 @@ export default function ProfileScreen() {
   };
 
   const confirmOut = () => {
-    Alert.alert(t('confirmLogout'), t('confirmLogoutBody'), [
-      { text: t('cancel'), style: 'cancel' },
-      { text: t('yesLogout'), style: 'destructive', onPress: () => logout() },
-    ]);
+    tap();
+    setOutAsk(true);
+  };
+
+  const doLogout = async () => {
+    if (outBusy) return;
+    setOutBusy(true);
+    try {
+      await logout();
+    } finally {
+      setOutBusy(false);
+      setOutAsk(false);
+    }
   };
 
   const openEditor = () => {
@@ -152,7 +165,7 @@ export default function ProfileScreen() {
           <View>
             <View style={{ height: 148, backgroundColor: palette.primary }}>
               {user.coverImage ? (
-                <Image source={{ uri: user.coverImage }} style={{ width: '100%', height: 148 }} contentFit="cover" />
+                <VaultImage uri={user.coverImage} style={{ width: '100%', height: 148 }} />
               ) : (
                 <Image source={require('../assets/salon-logo.png')} style={styles.coverMark} contentFit="contain" />
               )}
@@ -191,14 +204,7 @@ export default function ProfileScreen() {
                 <Stat n={mine.length} l={t('post')} color={palette.text} muted={palette.muted} />
                 <Stat n={myVideos.length} l={t('videos')} color={palette.text} muted={palette.muted} />
               </View>
-              {user.introVideo ? (
-                <Video
-                  source={{ uri: user.introVideo }}
-                  style={styles.intro}
-                  useNativeControls
-                  resizeMode={ResizeMode.COVER}
-                />
-              ) : null}
+              {user.introVideo ? <SalonVideo uri={user.introVideo} height={180} autoPlay /> : null}
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
                 <Button title={t('editProfile')} variant="soft" onPress={openEditor} style={{ flex: 1 }} />
                 <Button
@@ -208,7 +214,10 @@ export default function ProfileScreen() {
                   style={{ flex: 1 }}
                 />
               </View>
-              <Button title={t('aboutDev')} variant="ghost" onPress={() => nav.navigate('AboutDeveloper')} style={{ marginTop: 8 }} />
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                <Button title={t('academy')} variant="ghost" onPress={() => nav.navigate('Academy')} style={{ flex: 1 }} />
+                <Button title={t('aboutDev')} variant="ghost" onPress={() => nav.navigate('AboutDeveloper')} style={{ flex: 1 }} />
+              </View>
               <Button title={t('logout')} variant="danger" onPress={confirmOut} style={{ marginTop: 8 }} />
               <Text style={{ color: palette.text, fontWeight: '800', marginTop: 22, marginBottom: 8 }}>Your posts</Text>
             </View>
@@ -222,11 +231,9 @@ export default function ProfileScreen() {
             <Text style={{ color: palette.muted, fontSize: 12 }}>{timeAgo(item.createdAt)}</Text>
             <Text style={{ color: palette.text, marginTop: 6 }}>{item.content}</Text>
             {item.image ? (
-              <Image source={{ uri: item.image }} style={{ height: 160, borderRadius: 12, marginTop: 8 }} contentFit="cover" />
+              <VaultImage uri={item.image} style={{ height: 160, borderRadius: 12, marginTop: 8 }} />
             ) : null}
-            {item.video ? (
-              <Video source={{ uri: item.video }} style={{ height: 180, borderRadius: 12, marginTop: 8 }} useNativeControls resizeMode={ResizeMode.COVER} />
-            ) : null}
+            {item.video ? <SalonVideo uri={item.video} height={180} autoPlay /> : null}
           </Card>
         )}
       />
@@ -237,23 +244,22 @@ export default function ProfileScreen() {
             <View style={[styles.modalHead, { borderBottomColor: palette.border }]}>
               <Pressable
                 onPress={() => {
-                  if (dirty) {
-                    Alert.alert('Unsaved changes', 'Save your photo and video before leaving?', [
-                      { text: t('cancel'), style: 'cancel' },
-                      { text: 'Discard', style: 'destructive', onPress: () => setEdit(false) },
-                      { text: t('save'), onPress: save },
-                    ]);
-                  } else setEdit(false);
+                  if (dirty) setLeaveAsk(true);
+                  else setEdit(false);
                 }}
               >
                 <Text style={{ color: palette.primary, fontWeight: '700' }}>{t('cancel')}</Text>
               </Pressable>
               <Text style={{ color: palette.text, fontWeight: '800' }}>{t('editProfile')}</Text>
-              <View style={{ width: 50 }} />
+              <Pressable onPress={save} disabled={saving || !dirty} hitSlop={8}>
+                <Text style={{ color: dirty ? palette.primary : palette.muted, fontWeight: '800' }}>
+                  {saving ? '…' : t('save')}
+                </Text>
+              </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
               <Pressable onPress={() => pickImage('cover')} style={[styles.coverEdit, { backgroundColor: palette.primary }]}>
-                {cover ? <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+                {cover ? <VaultImage uri={cover} style={StyleSheet.absoluteFill} /> : null}
                 <View style={[styles.coverBtn, { backgroundColor: palette.overlay }]}>
                   <Ionicons name="image" size={16} color="#fff" />
                   <Text style={{ color: '#fff', fontWeight: '700', marginLeft: 6 }}>{t('changeCover')}</Text>
@@ -279,7 +285,7 @@ export default function ProfileScreen() {
                 {t('introVideo').toUpperCase()}
               </Text>
               {intro ? (
-                <Video source={{ uri: intro }} style={styles.intro} useNativeControls resizeMode={ResizeMode.COVER} />
+                <SalonVideo uri={intro} height={180} autoPlay />
               ) : (
                 <Text style={{ color: palette.muted, marginBottom: 8 }}>
                   {premium ? 'Add a short intro. It saves to the Salone cloud with your profile.' : 'Premium unlocks intro video on your profile.'}
@@ -302,6 +308,34 @@ export default function ProfileScreen() {
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
+
+      <ConfirmSheet
+        visible={leaveAsk}
+        title="Unsaved changes"
+        body="Save your photo and video to your permanent profile before leaving?"
+        confirmLabel={t('save')}
+        cancelLabel="Discard"
+        busy={saving}
+        onCancel={() => {
+          setLeaveAsk(false);
+          setEdit(false);
+        }}
+        onConfirm={async () => {
+          await save();
+          setLeaveAsk(false);
+        }}
+      />
+      <ConfirmSheet
+        visible={outAsk}
+        title={t('confirmLogout')}
+        body={t('confirmLogoutBody')}
+        confirmLabel={t('yesLogout')}
+        cancelLabel={t('cancel')}
+        danger
+        busy={outBusy}
+        onCancel={() => { if (!outBusy) setOutAsk(false); }}
+        onConfirm={doLogout}
+      />
     </SafeAreaView>
   );
 }

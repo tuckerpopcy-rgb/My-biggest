@@ -11,13 +11,15 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useNavigation } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
 import { Button, Card, FlagBar } from '../components/UI';
+import { VaultImage } from '../components/VaultImage';
 
 export default function AboutDeveloperScreen() {
+  const nav = useNavigation<any>();
   const { palette, t, developer, user, updateDeveloper, tap, buzz, developerLogin } = useApp();
   const canEdit = !!user?.isDeveloper;
   const [gate, setGate] = useState(false);
@@ -86,7 +88,7 @@ export default function AboutDeveloperScreen() {
         <Card style={{ alignItems: 'center', paddingVertical: 22 }}>
           <Pressable onPress={canEdit ? upload : undefined}>
             {developer.image ? (
-              <Image source={{ uri: developer.image }} style={styles.photo} contentFit="cover" />
+              <VaultImage uri={developer.image} style={styles.photo} />
             ) : (
               <View style={[styles.photo, { backgroundColor: palette.primary, alignItems: 'center', justifyContent: 'center' }]}>
                 <Ionicons name="person" size={64} color={palette.primaryText} />
@@ -115,7 +117,10 @@ export default function AboutDeveloperScreen() {
         </Card>
 
         {canEdit ? (
-          <Button title={t('uploadDevPhoto')} icon="image" onPress={upload} style={{ marginTop: 16 }} />
+          <>
+            <Button title={t('uploadDevPhoto')} icon="image" onPress={upload} style={{ marginTop: 16 }} />
+            <Button title="Academy desk" icon="school" variant="soft" onPress={() => { tap(); nav.navigate('AcademyAdmin'); }} style={{ marginTop: 8 }} />
+          </>
         ) : (
           <Text style={{ color: palette.muted, marginTop: 16, textAlign: 'center', lineHeight: 20 }}>
             Henry Tucker built Salone Na We Yon. His portrait and tools appear here once he is signed in.
@@ -123,9 +128,9 @@ export default function AboutDeveloperScreen() {
         )}
 
         <View style={styles.hiddenWrap}>
-          <Pressable onPress={openGate} hitSlop={18} style={styles.hiddenHit}>
-            <View style={[styles.tinyLion, { borderColor: palette.primary }]}>
-              <View style={[styles.tinyDot, { backgroundColor: palette.primary }]} />
+          <Pressable onLongPress={openGate} delayLongPress={600} hitSlop={12} style={styles.hiddenHit}>
+            <View style={[styles.tinyLion, { borderColor: palette.border }]}>
+              <View style={[styles.tinyDot, { backgroundColor: palette.border }]} />
             </View>
           </Pressable>
         </View>

@@ -31,6 +31,12 @@ const accents: Record<AccentName, { primary: string; secondary: string; accent: 
   forest: { primary: '#14532D', secondary: '#365314', accent: '#84CC16' },
   sunset: { primary: '#C2410C', secondary: '#9A3412', accent: '#F59E0B' },
   royal: { primary: '#4C1D95', secondary: '#1E3A8A', accent: '#C084FC' },
+  ember: { primary: '#EA580C', secondary: '#9A3412', accent: '#FDBA74' },
+  aurora: { primary: '#0F766E', secondary: '#155E75', accent: '#5EEAD4' },
+  diamond: { primary: '#334155', secondary: '#0F172A', accent: '#E2E8F0' },
+  mango: { primary: '#EA580C', secondary: '#1B7A3D', accent: '#FACC15' },
+  harbour: { primary: '#0369A1', secondary: '#0E7490', accent: '#7DD3FC' },
+  krioNight: { primary: '#6D28D9', secondary: '#1B7A3D', accent: '#F472B6' },
 };
 
 export function getPalette(dark: boolean, accent: AccentName): Palette {
@@ -104,4 +110,10 @@ export const ACCENT_OPTIONS: { key: AccentName; label: string; color: string }[]
   { key: 'forest', label: 'Rainforest', color: '#14532D' },
   { key: 'sunset', label: 'Lumley Sunset', color: '#C2410C' },
   { key: 'royal', label: 'Cotton Tree Royal', color: '#4C1D95' },
+  { key: 'ember', label: 'Orange Money Ember', color: '#EA580C' },
+  { key: 'aurora', label: 'Peninsula Aurora', color: '#0F766E' },
+  { key: 'diamond', label: 'Premium Diamond', color: '#334155' },
+  { key: 'mango', label: 'Mango Market', color: '#EA580C' },
+  { key: 'harbour', label: 'Harbour Glow', color: '#0369A1' },
+  { key: 'krioNight', label: 'Krio Night', color: '#6D28D9' },
 ];

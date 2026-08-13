@@ -9,12 +9,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
 import { Avatar, Button, Card, Chip, Empty, Field, FlagBar } from '../components/UI';
+import { VaultImage } from '../components/VaultImage';
 import { Listing, ListingCategory } from '../lib/types';
 import { timeAgo } from '../lib/hash';
 
@@ -161,7 +161,7 @@ export default function MarketScreen() {
             <Pressable onPress={() => setDetail(item)}>
               <Card style={{ marginBottom: 12, padding: 0, overflow: 'hidden' }}>
                 {item.image ? (
-                  <Image source={{ uri: item.image }} style={{ width: '100%', height: 160 }} contentFit="cover" />
+                  <VaultImage uri={item.image} style={{ width: '100%', height: 160 }} />
                 ) : (
                   <View style={[styles.ph, { backgroundColor: palette.bgAlt }]}>
                     <Ionicons name="cube-outline" size={36} color={palette.primary} />
@@ -243,7 +243,7 @@ export default function MarketScreen() {
                     <Chip key={c} label={t(c)} active={category === c} onPress={() => setCategory(c)} />
                   ))}
                 </View>
-                {img ? <Image source={{ uri: img }} style={{ width: '100%', height: 160, borderRadius: 14, marginBottom: 12 }} /> : null}
+                {img ? <VaultImage uri={img} style={{ width: '100%', height: 160, borderRadius: 14, marginBottom: 12 }} /> : null}
                 <Button title={t('uploadPhoto')} icon="image-outline" variant="soft" onPress={pick} />
                 <View style={{ height: 10 }} />
                 <Button title={t('publish')} onPress={submit} disabled={!title.trim() || !description.trim()} />
@@ -257,7 +257,7 @@ export default function MarketScreen() {
         <Pressable style={styles.overlay} onPress={() => setDetail(null)}>
           <Pressable style={[styles.sheet, { backgroundColor: palette.card }]} onPress={() => {}}>
             {detail?.image ? (
-              <Image source={{ uri: detail.image }} style={{ width: '100%', height: 180 }} contentFit="cover" />
+              <VaultImage uri={detail.image} style={{ width: '100%', height: 180 }} />
             ) : null}
             <View style={{ padding: 16 }}>
               <Text style={{ color: palette.text, fontSize: 20, fontWeight: '900' }}>{detail?.title}</Text>

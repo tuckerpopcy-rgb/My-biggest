@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -140,11 +141,29 @@ export function Avatar({
 }) {
   const { palette } = useApp();
   const letter = (name || '?').trim().charAt(0).toUpperCase();
+  const [src, setSrc] = React.useState(uri || '');
+  React.useEffect(() => {
+    let live = true;
+    (async () => {
+      if (!uri) {
+        if (live) setSrc('');
+        return;
+      }
+      const { playableUrl, peekPlayable } = await import('../lib/mediaVault');
+      const now = peekPlayable(uri) || uri;
+      if (live) setSrc(now);
+      const next = await playableUrl(uri);
+      if (live && next) setSrc(next);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [uri]);
   return (
     <View>
-      {uri ? (
+      {src ? (
         <Image
-          source={{ uri }}
+          source={{ uri: src }}
           style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: palette.bgAlt }}
           contentFit="cover"
         />
@@ -397,7 +416,63 @@ const styles = StyleSheet.create({
   hiddenMark: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', opacity: 0.55 },
   tinyLion: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   tinyDot: { width: 5, height: 5, borderRadius: 3 },
+  veil: {
+    flex: 1,
+    backgroundColor: 'rgba(6,16,10,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  sheet: { width: '100%', maxWidth: 360, borderRadius: 20, borderWidth: 1, padding: 20 },
 });
+
+export function ConfirmSheet({
+  visible,
+  title,
+  body,
+  confirmLabel,
+  cancelLabel,
+  danger,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  danger?: boolean;
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { palette } = useApp();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <Pressable style={styles.veil} onPress={busy ? undefined : onCancel}>
+        <Pressable
+          style={[styles.sheet, { backgroundColor: palette.card, borderColor: palette.border }]}
+          onPress={() => {}}
+        >
+          <Text style={{ color: palette.text, fontSize: 18, fontWeight: '900' }}>{title}</Text>
+          <Text style={{ color: palette.muted, marginTop: 8, lineHeight: 21 }}>{body}</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 18 }}>
+            <Button title={cancelLabel} variant="soft" onPress={onCancel} disabled={busy} style={{ flex: 1 }} />
+            <Button
+              title={confirmLabel}
+              variant={danger ? 'danger' : 'primary'}
+              onPress={onConfirm}
+              loading={busy}
+              disabled={busy}
+              style={{ flex: 1 }}
+            />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
 export const textStyles = {
   h1: { fontSize: 28, fontWeight: '900' as const, letterSpacing: -0.5 },

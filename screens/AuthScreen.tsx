@@ -170,14 +170,18 @@ export default function AuthScreen() {
           </ScrollView>
 
           <Pressable
-            onPress={() => {
+            onLongPress={() => {
               tap();
               nav.navigate('AboutDeveloper');
             }}
-            style={styles.aboutLink}
+            delayLongPress={650}
+            hitSlop={8}
+            style={styles.hiddenMark}
+            accessibilityLabel=""
           >
-            <Text style={{ color: palette.muted, fontSize: 13, fontWeight: '600' }}>{t('aboutDev')}</Text>
-            <Text style={{ color: palette.text, fontSize: 13, fontWeight: '800', marginTop: 2 }}>Henry Tucker</Text>
+            <View style={[styles.tinyLion, { borderColor: palette.border }]}>
+              <View style={[styles.tinyDot, { backgroundColor: palette.border }]} />
+            </View>
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -227,5 +231,7 @@ const styles = StyleSheet.create({
   card: { borderRadius: 20, padding: 16, borderWidth: 1 },
   h: { fontSize: 22, fontWeight: '900', marginBottom: 4 },
   langLabel: { marginTop: 20, marginBottom: 8, fontWeight: '700', fontSize: 12, letterSpacing: 0.8, textTransform: 'uppercase' },
-  aboutLink: { marginTop: 28, alignItems: 'center', paddingVertical: 8 },
+  hiddenMark: { marginTop: 40, alignItems: 'center', justifyContent: 'center', opacity: 0.22, alignSelf: 'center', width: 18, height: 18 },
+  tinyLion: { width: 10, height: 10, borderRadius: 5, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  tinyDot: { width: 3, height: 3, borderRadius: 1.5 },
 });

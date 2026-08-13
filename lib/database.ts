@@ -13,7 +13,11 @@ import {
   Session,
   SavedItem,
   CloudVideo,
+  StudyApplication,
+  ClassPayment,
+  LessonTurn,
 } from './types';
+import { readFlags, readSession, writeFlags, writeSession } from './session';
 
 const KEY = 'snwy.db.v2';
 const LEGACY = 'snwy.db.v1';
@@ -29,6 +33,9 @@ export interface Database {
   follows: Follow[];
   saved: SavedItem[];
   videos: CloudVideo[];
+  applications: StudyApplication[];
+  payments: ClassPayment[];
+  lessons: LessonTurn[];
   settings: AppSettings;
   developer: DeveloperProfile;
   session: Session | null;
@@ -42,6 +49,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   haptics: true,
   clickSounds: true,
   notifications: true,
+  glow: true,
 };
 
 export const DEFAULT_DEVELOPER: DeveloperProfile = {
@@ -90,6 +98,7 @@ function hydratePost(p: Partial<Post> & { id: string; userId: string }): Post {
     likes: p.likes || [],
     comments: p.comments || [],
     createdAt: p.createdAt || Date.now(),
+    updatedAt: p.updatedAt || p.createdAt || Date.now(),
     boosted: !!p.boosted,
   };
 }
@@ -107,6 +116,7 @@ function hydrateListing(l: Partial<Listing> & { id: string; userId: string; titl
     location: l.location || 'Sierra Leone',
     status: l.status || 'available',
     createdAt: l.createdAt || Date.now(),
+    updatedAt: l.updatedAt || l.createdAt || Date.now(),
     boosted: !!l.boosted,
   };
 }
@@ -123,6 +133,9 @@ function empty(): Database {
     follows: [],
     saved: [],
     videos: [],
+    applications: [],
+    payments: [],
+    lessons: [],
     settings: { ...DEFAULT_SETTINGS },
     developer: { ...DEFAULT_DEVELOPER },
     session: null,
@@ -133,6 +146,33 @@ function empty(): Database {
 let memory: Database = empty();
 let ready = false;
 const listeners = new Set<() => void>();
+let afterWrite: (() => void) | null = null;
+
+export function onDatabaseWrite(fn: () => void) {
+  afterWrite = fn;
+}
+
+export function snapshot(): Database {
+  return {
+    ...memory,
+    users: memory.users.slice(),
+    posts: memory.posts.slice(),
+    listings: memory.listings.slice(),
+    conversations: memory.conversations.slice(),
+    messages: memory.messages.slice(),
+    notifications: memory.notifications.slice(),
+    quizResults: memory.quizResults.slice(),
+    follows: memory.follows.slice(),
+    saved: memory.saved.slice(),
+    videos: memory.videos.slice(),
+    applications: memory.applications.slice(),
+    payments: memory.payments.slice(),
+    lessons: memory.lessons.slice(),
+    settings: { ...memory.settings },
+    developer: { ...memory.developer },
+    session: memory.session ? { ...memory.session } : null,
+  };
+}
 
 export function subscribe(fn: () => void): () => void {
   listeners.add(fn);
@@ -160,12 +200,15 @@ function normalize(parsed: Partial<Database>): Database {
     posts: (parsed.posts || []).map((p) => hydratePost(p)),
     listings: (parsed.listings || []).map((l) => hydrateListing(l)),
     conversations: parsed.conversations || [],
-    messages: parsed.messages || [],
+    messages: (parsed.messages || []).map((m) => ({ ...m, media: m.media ?? null })),
     notifications: parsed.notifications || [],
     quizResults: parsed.quizResults || [],
     follows: parsed.follows || [],
     saved: parsed.saved || [],
     videos: parsed.videos || [],
+    applications: parsed.applications || [],
+    payments: parsed.payments || [],
+    lessons: parsed.lessons || [],
     session: parsed.session || null,
     tutorialSeen: !!parsed.tutorialSeen,
   };
@@ -178,24 +221,55 @@ export async function initDB(): Promise<Database> {
     if (!raw) raw = await AsyncStorage.getItem(LEGACY);
     if (raw) {
       memory = normalize(JSON.parse(raw) as Database);
-      await persist();
     } else {
       memory = empty();
-      await persist();
     }
+    const locked = await readSession();
+    const flags = await readFlags();
+    if (locked && memory.users.some((u) => u.id === locked.userId)) {
+      memory.session = locked;
+    } else {
+      memory.session = null;
+      if (locked) await writeSession(null);
+    }
+    if (flags.tutorialSeen || memory.tutorialSeen) {
+      memory.tutorialSeen = true;
+    }
+    await persist();
   } catch {
     memory = empty();
+    try {
+      const locked = await readSession();
+      if (locked) memory.session = locked;
+    } catch {
+      /* ignore */
+    }
   }
   ready = true;
   return memory;
 }
 
 async function persist() {
+  const liveSession = memory.session;
   try {
-    await AsyncStorage.setItem(KEY, JSON.stringify(memory));
+    const payload = { ...memory, session: liveSession };
+    await AsyncStorage.setItem(KEY, JSON.stringify(payload));
   } catch {
     /* storage full — keep memory */
   }
+  try {
+    await writeSession(memory.session);
+    await writeFlags({ tutorialSeen: memory.tutorialSeen });
+  } catch {
+    /* session vault is best-effort */
+  }
+}
+
+export async function clearSessionOnly(): Promise<void> {
+  memory.session = null;
+  await writeSession(null);
+  await persist();
+  emit();
 }
 
 export function getDB(): Database {
@@ -204,8 +278,17 @@ export function getDB(): Database {
 
 export async function mutate(updater: (db: Database) => void): Promise<Database> {
   updater(memory);
-  await persist();
   emit();
+  try {
+    await persist();
+  } catch {
+    emit();
+  }
+  try {
+    afterWrite?.();
+  } catch {
+    /* ignore live fan-out errors */
+  }
   return memory;
 }
 

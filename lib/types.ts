@@ -12,7 +12,19 @@ export type LanguageCode =
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
-export type AccentName = 'flag' | 'gold' | 'ocean' | 'forest' | 'sunset' | 'royal';
+export type AccentName =
+  | 'flag'
+  | 'gold'
+  | 'ocean'
+  | 'forest'
+  | 'sunset'
+  | 'royal'
+  | 'ember'
+  | 'aurora'
+  | 'diamond'
+  | 'mango'
+  | 'harbour'
+  | 'krioNight';
 
 export interface User {
   id: string;
@@ -53,6 +65,7 @@ export interface Post {
   likes: string[];
   comments: Comment[];
   createdAt: number;
+  updatedAt: number;
   boosted: boolean;
 }
 
@@ -79,6 +92,7 @@ export interface Listing {
   location: string;
   status: 'available' | 'sold';
   createdAt: number;
+  updatedAt: number;
   boosted: boolean;
 }
 
@@ -95,8 +109,10 @@ export interface Message {
   senderId: string;
   content: string;
   createdAt: number;
+  updatedAt?: number;
   read: boolean;
-  kind: 'text' | 'quiz';
+  kind: 'text' | 'quiz' | 'image' | 'video';
+  media?: string | null;
   quizPayload?: {
     question: string;
     options: string[];
@@ -112,7 +128,8 @@ export type NotificationType =
   | 'system'
   | 'market'
   | 'quiz'
-  | 'video';
+  | 'video'
+  | 'academy';
 
 export interface AppNotification {
   id: string;
@@ -163,6 +180,48 @@ export interface AppSettings {
   haptics: boolean;
   clickSounds: boolean;
   notifications: boolean;
+  glow: boolean;
+}
+
+export type CourseId = 'forex' | 'office' | 'software';
+
+export type ApplicationStatus = 'awaiting_payment' | 'paid_pending' | 'approved' | 'rejected';
+
+export interface StudyApplication {
+  id: string;
+  userId: string;
+  fullName: string;
+  phone: string;
+  reason: string;
+  subjects: CourseId[];
+  status: ApplicationStatus;
+  createdAt: number;
+  updatedAt: number;
+  paymentId: string | null;
+  reviewedBy: string | null;
+  reviewNote: string;
+}
+
+export interface ClassPayment {
+  id: string;
+  applicationId: string;
+  userId: string;
+  amount: number;
+  currency: string;
+  method: 'orange_money';
+  orangeNumber: string;
+  senderNumber: string;
+  reference: string;
+  createdAt: number;
+}
+
+export interface LessonTurn {
+  id: string;
+  userId: string;
+  subject: CourseId;
+  role: 'student' | 'teacher';
+  text: string;
+  createdAt: number;
 }
 
 export interface DeveloperProfile {

@@ -12,9 +12,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
+import { SalonVideo } from '../components/SalonVideo';
+import { VaultImage } from '../components/VaultImage';
 import { useNavigation } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
 import { Avatar, Button, Card, Empty, FlagBar, IconBtn } from '../components/UI';
@@ -113,6 +113,7 @@ export default function FeedScreen() {
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <IconBtn name="videocam-outline" color={palette.text} onPress={() => nav.navigate('Studio')} />
+          <IconBtn name="help-circle-outline" color={palette.text} onPress={() => nav.navigate('Quiz')} />
           <IconBtn name="sparkles" color={palette.primary} onPress={() => nav.navigate('SalonAI')} />
           <IconBtn
             name="notifications-outline"
@@ -181,12 +182,8 @@ export default function FeedScreen() {
               multiline
               style={{ color: palette.text, fontSize: 17, minHeight: 140, textAlignVertical: 'top' }}
             />
-            {img ? (
-              <Image source={{ uri: img }} style={styles.preview} contentFit="cover" />
-            ) : null}
-            {vid ? (
-              <Video source={{ uri: vid }} style={styles.preview} useNativeControls resizeMode={ResizeMode.COVER} />
-            ) : null}
+            {img ? <VaultImage uri={img} style={styles.preview} /> : null}
+            {vid ? <SalonVideo uri={vid} height={200} autoPlay /> : null}
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
               <Button title={t('uploadPhoto')} icon="image-outline" variant="soft" onPress={pick} style={{ flex: 1 }} />
               <Button title={t('uploadVideo')} icon="videocam-outline" variant="soft" onPress={pickVideo} style={{ flex: 1 }} />
@@ -315,12 +312,8 @@ function PostCard({
       {post.content ? (
         <Text style={{ color: palette.text, marginTop: 10, fontSize: 15.5, lineHeight: 22 }}>{post.content}</Text>
       ) : null}
-      {post.image ? (
-        <Image source={{ uri: post.image }} style={styles.postImg} contentFit="cover" />
-      ) : null}
-      {post.video ? (
-        <Video source={{ uri: post.video }} style={styles.postImg} useNativeControls resizeMode={ResizeMode.COVER} />
-      ) : null}
+      {post.image ? <VaultImage uri={post.image} style={styles.postImg} /> : null}
+      {post.video ? <SalonVideo uri={post.video} height={220} autoPlay /> : null}
       <View style={styles.actions}>
         <Pressable onPress={onLike} style={styles.act}>
           <Ionicons name={liked ? 'heart' : 'heart-outline'} size={20} color={liked ? '#E11D48' : palette.muted} />

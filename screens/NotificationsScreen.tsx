@@ -16,6 +16,7 @@ const ICONS: Record<NotificationType, keyof typeof Ionicons.glyphMap> = {
   market: 'storefront',
   quiz: 'help-circle',
   video: 'videocam',
+  academy: 'school',
 };
 
 export default function NotificationsScreen() {

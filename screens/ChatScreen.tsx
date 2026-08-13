@@ -12,8 +12,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as ImagePicker from 'expo-image-picker';
 import { useApp } from '../context/AppContext';
 import { Avatar, Empty } from '../components/UI';
+import { SalonVideo } from '../components/SalonVideo';
+import { VaultImage } from '../components/VaultImage';
 import { timeAgo } from '../lib/hash';
 
 export default function ChatScreen() {
@@ -28,6 +31,7 @@ export default function ChatScreen() {
     conversations,
     messages,
     sendMessage,
+    sendMediaMessage,
     sendQuizMessage,
     markConversationRead,
     tap,
@@ -53,6 +57,18 @@ export default function ChatScreen() {
     if (!v) return;
     setText('');
     await sendMessage(conversationId, v);
+  };
+
+  const attach = async (kind: 'image' | 'video') => {
+    tap();
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: kind === 'video' ? ['videos'] : ['images'],
+      quality: 0.7,
+      videoMaxDuration: 90,
+    });
+    if (!res.canceled && res.assets[0]?.uri) {
+      await sendMediaMessage(conversationId, res.assets[0].uri, kind);
+    }
   };
 
   return (
@@ -109,6 +125,31 @@ export default function ChatScreen() {
                 </View>
               );
             }
+            if ((item.kind === 'image' || item.kind === 'video') && item.media) {
+              return (
+                <View
+                  style={[
+                    styles.bubble,
+                    {
+                      backgroundColor: mine ? palette.primary : palette.card,
+                      alignSelf: mine ? 'flex-end' : 'flex-start',
+                      borderColor: mine ? palette.primary : palette.border,
+                      padding: 6,
+                      overflow: 'hidden',
+                    },
+                  ]}
+                >
+                  {item.kind === 'video' ? (
+                    <SalonVideo uri={item.media} height={180} autoPlay />
+                  ) : (
+                    <VaultImage uri={item.media} style={{ width: 220, height: 180, borderRadius: 12 }} />
+                  )}
+                  <Text style={{ color: mine ? palette.primaryText : palette.muted, fontSize: 10, marginTop: 4, marginLeft: 6 }}>
+                    {timeAgo(item.createdAt)}
+                  </Text>
+                </View>
+              );
+            }
             return (
               <View
                 style={[
@@ -137,6 +178,12 @@ export default function ChatScreen() {
             style={[styles.quizBtn, { backgroundColor: palette.bgAlt }]}
           >
             <Ionicons name="help-circle" size={22} color={palette.primary} />
+          </Pressable>
+          <Pressable onPress={() => attach('image')} style={[styles.quizBtn, { backgroundColor: palette.bgAlt }]}>
+            <Ionicons name="image" size={20} color={palette.primary} />
+          </Pressable>
+          <Pressable onPress={() => attach('video')} style={[styles.quizBtn, { backgroundColor: palette.bgAlt }]}>
+            <Ionicons name="videocam" size={20} color={palette.primary} />
           </Pressable>
           <TextInput
             value={text}

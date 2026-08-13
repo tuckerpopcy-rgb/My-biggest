@@ -1,16 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
-import { Button, Card, FlagBar } from '../components/UI';
+import { Button, Card, ConfirmSheet, FlagBar } from '../components/UI';
 import { LANGUAGES } from '../lib/i18n';
 import { ACCENT_OPTIONS } from '../lib/theme';
 import { AccentName, LanguageCode, ThemeMode } from '../lib/types';
 
 export default function SettingsScreen() {
   const nav = useNavigation<any>();
-  const { palette, t, settings, updateSettings, tap, buzz, isPremium } = useApp();
+  const { palette, t, settings, updateSettings, tap, buzz, isPremium, logout } = useApp();
+  const [outAsk, setOutAsk] = useState(false);
+  const [outBusy, setOutBusy] = useState(false);
 
   const setTheme = (mode: ThemeMode) => {
     tap();
@@ -139,13 +141,51 @@ export default function SettingsScreen() {
             color={palette.text}
             onChange={(v) => updateSettings({ notifications: v })}
           />
+          <Row
+            label={t('glow')}
+            value={!!settings.glow}
+            on={palette.primary}
+            color={palette.text}
+            onChange={(v) => updateSettings({ glow: v })}
+          />
         </Card>
 
+        <Button
+          title={t('logout')}
+          variant="danger"
+          onPress={() => {
+            tap();
+            setOutAsk(true);
+          }}
+          style={{ marginTop: 22 }}
+        />
         <Text style={{ color: palette.muted, marginTop: 18, fontSize: 12, lineHeight: 18 }}>
           Theme, language, haptics, click sounds and notifications apply instantly across the whole app.
-          Your session stays signed in until you log out. Accounts are permanent on this device database.
+          Your session stays signed in until you log out. Accounts are permanent. Logging out never deletes your registration.
         </Text>
       </ScrollView>
+      <ConfirmSheet
+        visible={outAsk}
+        title={t('confirmLogout')}
+        body={t('confirmLogoutBody')}
+        confirmLabel={t('yesLogout')}
+        cancelLabel={t('cancel')}
+        danger
+        busy={outBusy}
+        onCancel={() => {
+          if (!outBusy) setOutAsk(false);
+        }}
+        onConfirm={async () => {
+          if (outBusy) return;
+          setOutBusy(true);
+          try {
+            await logout();
+          } finally {
+            setOutBusy(false);
+            setOutAsk(false);
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

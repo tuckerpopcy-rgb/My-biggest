@@ -11,11 +11,15 @@ import { useColorScheme } from 'react-native';
 import {
   AppNotification,
   AppSettings,
+  ApplicationStatus,
+  ClassPayment,
   CloudVideo,
   Comment,
   Conversation,
+  CourseId,
   DeveloperProfile,
   LanguageCode,
+  LessonTurn,
   Listing,
   ListingCategory,
   Message,
@@ -23,6 +27,7 @@ import {
   ProfileDraft,
   QuizResult,
   SavedItem,
+  StudyApplication,
   User,
 } from '../lib/types';
 import { hashPassword, now, uid, verifyPassword } from '../lib/hash';
@@ -32,13 +37,19 @@ import {
   getDB,
   initDB,
   mutate,
+  onDatabaseWrite,
+  snapshot,
   subscribe,
 } from '../lib/database';
+import { writeSession } from '../lib/session';
 import { getPalette, Palette } from '../lib/theme';
 import { t as translate } from '../lib/i18n';
 import { haptic, loadSounds, playClick, playNotify, playSuccess } from '../lib/sounds';
 import { pickOneQuiz } from '../lib/quiz';
-import { loadSupabaseCfg, uploadSalonMedia } from '../lib/supabase';
+import { loadSupabaseCfg } from '../lib/supabase';
+import { ingestMedia } from '../lib/mediaVault';
+import { publishLive, startLiveSync } from '../lib/liveSync';
+import { ACADEMY_FEE, ORANGE_MONEY, askTeacher, openingLecture } from '../lib/teachAI';
 
 interface AuthResult {
   ok: boolean;
@@ -101,6 +112,7 @@ interface AppContextValue {
   followingCount: (userId: string) => number;
   openConversation: (otherId: string) => Promise<string>;
   sendMessage: (conversationId: string, content: string) => Promise<void>;
+  sendMediaMessage: (conversationId: string, uri: string, kind: 'image' | 'video') => Promise<void>;
   sendQuizMessage: (conversationId: string) => Promise<void>;
   markConversationRead: (conversationId: string) => Promise<void>;
   unreadCount: () => number;
@@ -123,6 +135,20 @@ interface AppContextValue {
   boostPost: (postId: string) => Promise<boolean>;
   boostListing: (listingId: string) => Promise<boolean>;
   cloudReady: boolean;
+  applications: StudyApplication[];
+  payments: ClassPayment[];
+  lessons: LessonTurn[];
+  applyForAcademy: (input: {
+    fullName: string;
+    phone: string;
+    reason: string;
+    subjects: CourseId[];
+  }) => Promise<StudyApplication | null>;
+  submitClassPayment: (applicationId: string, senderNumber: string, reference: string) => Promise<boolean>;
+  reviewApplication: (applicationId: string, status: 'approved' | 'rejected', note?: string) => Promise<void>;
+  myApplication: () => StudyApplication | undefined;
+  isAcademyApproved: (userId?: string) => boolean;
+  askLecture: (subject: CourseId, question: string) => Promise<string>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -137,22 +163,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [db, setDb] = useState<Database>(getDB());
   const [cloudReady, setCloudReady] = useState(false);
   const tick = useRef(0);
+  const signedUserId = useRef<string | null>(null);
 
   useEffect(() => {
     let unsub = () => {};
+    let unlive = () => {};
     (async () => {
       await initDB();
       await loadSupabaseCfg();
       await loadSounds();
-      setDb({ ...getDB() });
+      onDatabaseWrite(() => publishLive());
+      setDb(snapshot());
       setCloudReady(true);
       setReady(true);
       unsub = subscribe(() => {
         tick.current += 1;
-        setDb({ ...getDB() });
+        setDb(snapshot());
+      });
+      unlive = startLiveSync(() => {
+        tick.current += 1;
+        setDb(snapshot());
       });
     })();
-    return () => unsub();
+    return () => {
+      unsub();
+      unlive();
+    };
   }, []);
 
   const settings = db.settings || DEFAULT_SETTINGS;
@@ -166,8 +202,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const t = useCallback((key: string) => translate(lang, key), [lang]);
 
   const user = useMemo(() => {
-    if (!db.session) return null;
-    return db.users.find((u) => u.id === db.session?.userId) || null;
+    const sid = db.session?.userId;
+    if (!sid) {
+      signedUserId.current = null;
+      return null;
+    }
+    const found = db.users.find((u) => u.id === sid) || null;
+    if (!found) {
+      signedUserId.current = null;
+      return null;
+    }
+    signedUserId.current = found.id;
+    return publicUser(found);
   }, [db.session, db.users]);
 
   const tap = useCallback(() => {
@@ -254,9 +300,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         lastSeen: now(),
         phone: input.phone.trim(),
       };
+      const session = { userId: nu.id, issuedAt: now() };
+      signedUserId.current = nu.id;
+      await writeSession(session);
       await mutate((d) => {
-        d.users.push(nu);
-        d.session = { userId: nu.id, issuedAt: now() };
+        if (!d.users.some((u) => u.id === nu.id || u.username === nu.username || u.email === nu.email)) {
+          d.users.push(nu);
+        }
+        d.session = session;
         d.settings.language = lang;
         d.notifications.unshift({
           id: uid('ntf'),
@@ -285,8 +336,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         buzz('warning');
         return { ok: false, error: t('invalidLogin') };
       }
+      const session = { userId: found.id, issuedAt: now() };
+      signedUserId.current = found.id;
+      await writeSession(session);
       await mutate((d) => {
-        d.session = { userId: found.id, issuedAt: now() };
+        d.session = session;
         const u = d.users.find((x) => x.id === found.id);
         if (u) u.lastSeen = now();
       });
@@ -329,9 +383,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           lastSeen: now(),
           phone: '',
         };
+        const session = { userId: (henry as User).id, issuedAt: now() };
+        signedUserId.current = (henry as User).id;
+        await writeSession(session);
         await mutate((d) => {
           d.users.push(henry as User);
-          d.session = { userId: (henry as User).id, issuedAt: now() };
+          d.session = session;
           d.notifications.unshift({
             id: uid('ntf'),
             userId: (henry as User).id,
@@ -344,6 +401,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       } else {
         const hid = henry.id;
+        const session = { userId: hid, issuedAt: now() };
+        signedUserId.current = hid;
+        await writeSession(session);
         await mutate((d) => {
           const u = d.users.find((x) => x.id === hid);
           if (u) {
@@ -355,7 +415,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             u.lastSeen = now();
             if (d.developer.image && !u.avatar) u.avatar = d.developer.image;
           }
-          d.session = { userId: hid, issuedAt: now() };
+          d.session = session;
         });
       }
       buzz('success');
@@ -366,6 +426,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     tap();
+    signedUserId.current = null;
+    const snapshot = getDB();
+    if (snapshot.session) {
+      const u = snapshot.users.find((x) => x.id === snapshot.session?.userId);
+      if (u) u.lastSeen = now();
+    }
+    snapshot.session = null;
+    await writeSession(null);
     await mutate((d) => {
       d.session = null;
     });
@@ -409,45 +477,59 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!user) return;
       const text = (input.content || '').trim();
       if (!text && !input.image && !input.video) return;
-      let image = input.image || null;
-      let video = input.video || null;
-      let mediaPath: string | null = null;
-      if (video) {
-        const up = await uploadSalonMedia(user.id, video, 'video');
-        video = up.url;
-        mediaPath = up.path;
-      } else if (image) {
-        const up = await uploadSalonMedia(user.id, image, 'image');
-        image = up.url;
-        mediaPath = up.path;
-      }
       const postId = uid('pst');
+      const rawImage = input.image || null;
+      const rawVideo = input.video || null;
       await mutate((d) => {
         d.posts.unshift({
           id: postId,
           userId: user.id,
           content: text,
-          image,
-          video,
-          mediaPath,
+          image: rawImage,
+          video: rawVideo,
+          mediaPath: rawVideo || rawImage,
           likes: [],
           comments: [],
           createdAt: now(),
+          updatedAt: now(),
           boosted: false,
         });
-        if (video) {
+        if (rawVideo) {
           d.videos.unshift({
             id: uid('vid'),
             userId: user.id,
             postId,
-            path: mediaPath || '',
-            publicUrl: video,
+            path: rawVideo,
+            publicUrl: rawVideo,
             caption: text,
             createdAt: now(),
           });
         }
       });
       buzz('success');
+      void (async () => {
+        let image = rawImage;
+        let video = rawVideo;
+        if (rawVideo) video = await ingestMedia(rawVideo, 'video');
+        else if (rawImage) image = await ingestMedia(rawImage, 'image');
+        if (image === rawImage && video === rawVideo) return;
+        await mutate((d) => {
+          const p = d.posts.find((x) => x.id === postId);
+          if (p) {
+            p.image = image;
+            p.video = video;
+            p.mediaPath = video || image;
+            p.updatedAt = now();
+          }
+          if (video) {
+            const v = d.videos.find((x) => x.postId === postId);
+            if (v) {
+              v.publicUrl = video;
+              v.path = video;
+            }
+          }
+        });
+      })();
     },
     [user, buzz]
   );
@@ -462,12 +544,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!p) return;
         const i = p.likes.indexOf(user.id);
         if (i >= 0) p.likes.splice(i, 1);
-        else {
-          p.likes.push(user.id);
-          if (p.userId !== user.id) {
-            const author = d.users.find((u) => u.id === p.userId);
-            if (author) notifyId = author.id;
-          }
+        else p.likes.push(user.id);
+        p.updatedAt = now();
+        if (p.userId !== user.id && p.likes.includes(user.id)) {
+          const author = d.users.find((u) => u.id === p.userId);
+          if (author) notifyId = author.id;
         }
       });
       if (notifyId) {
@@ -499,6 +580,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           createdAt: now(),
         };
         p.comments.push(c);
+        p.updatedAt = now();
         if (p.userId !== user.id) notifyTo = p.userId;
       });
       if (notifyTo) {
@@ -537,23 +619,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       image?: string | null;
     }) => {
       if (!user) return;
+      const id = uid('lst');
+      const raw = input.image || null;
       await mutate((d) => {
         d.listings.unshift({
-          id: uid('lst'),
+          id,
           userId: user.id,
           title: input.title.trim(),
           description: input.description.trim(),
           price: input.price,
           currency: 'SLE',
           category: input.category,
-          image: input.image || null,
+          image: raw,
           location: input.location.trim() || user.location,
           status: 'available',
           createdAt: now(),
+          updatedAt: now(),
           boosted: false,
         });
       });
       buzz('success');
+      if (raw) {
+        void ingestMedia(raw, 'image').then((stored) => {
+          if (stored === raw) return;
+          return mutate((d) => {
+            const l = d.listings.find((x) => x.id === id);
+            if (l) l.image = stored;
+          });
+        });
+      }
     },
     [user, buzz]
   );
@@ -561,7 +655,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const markListingSold = useCallback(async (id: string) => {
     await mutate((d) => {
       const l = d.listings.find((x) => x.id === id);
-      if (l) l.status = 'sold';
+      if (l) {
+        l.status = 'sold';
+        l.updatedAt = now();
+      }
     });
   }, []);
 
@@ -668,6 +765,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           createdAt: now(),
           read: false,
           kind: 'text',
+          media: null,
         };
         d.messages.push(msg);
         c.lastMessage = text;
@@ -682,6 +780,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           text.slice(0, 100),
           conversationId
         );
+      }
+    },
+    [user, settings]
+  );
+
+  const sendMediaMessage = useCallback(
+    async (conversationId: string, uri: string, kind: 'image' | 'video') => {
+      if (!user || !uri) return;
+      const msgId = uid('msg');
+      let other: string | null = null;
+      await mutate((d) => {
+        const c = d.conversations.find((x) => x.id === conversationId);
+        if (!c) return;
+        d.messages.push({
+          id: msgId,
+          conversationId,
+          senderId: user.id,
+          content: kind === 'video' ? 'Video' : 'Photo',
+          createdAt: now(),
+          read: false,
+          kind,
+          media: uri,
+        });
+        c.lastMessage = kind === 'video' ? 'Sent a video' : 'Sent a photo';
+        c.lastMessageAt = now();
+        other = c.participants.find((p) => p !== user.id) || null;
+      });
+      if (other) {
+        await pushNotif(
+          other,
+          'message',
+          user.displayName,
+          kind === 'video' ? 'Sent a video' : 'Sent a photo',
+          conversationId
+        );
+      }
+      const stored = await ingestMedia(uri, kind);
+      if (stored !== uri) {
+        await mutate((d) => {
+          const m = d.messages.find((x) => x.id === msgId);
+          if (m) m.media = stored;
+        });
       }
     },
     [user, settings]
@@ -789,11 +929,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateDeveloper = useCallback(async (patch: Partial<DeveloperProfile>) => {
+    const next = { ...patch };
+    if (next.image) next.image = await ingestMedia(next.image, 'avatar');
     await mutate((d) => {
-      d.developer = { ...d.developer, ...patch, updatedAt: now() };
-      if (patch.image !== undefined) {
+      d.developer = { ...d.developer, ...next, updatedAt: now() };
+      if (next.image !== undefined) {
         d.users.forEach((u) => {
-          if (u.isDeveloper) u.avatar = patch.image || u.avatar;
+          if (u.isDeveloper) u.avatar = next.image || u.avatar;
         });
       }
     });
@@ -824,16 +966,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let coverImage = draft.coverImage;
       let introVideo = draft.introVideo;
       if (avatar && avatar !== user.avatar) {
-        const up = await uploadSalonMedia(user.id, avatar, 'avatar');
-        avatar = up.url;
+        avatar = await ingestMedia(avatar, 'avatar');
       }
       if (coverImage && coverImage !== user.coverImage) {
-        const up = await uploadSalonMedia(user.id, coverImage, 'cover');
-        coverImage = up.url;
+        coverImage = await ingestMedia(coverImage, 'cover');
       }
       if (introVideo && introVideo !== user.introVideo) {
-        const up = await uploadSalonMedia(user.id, introVideo, 'video');
-        introVideo = up.url;
+        introVideo = await ingestMedia(introVideo, 'video');
       }
       await mutate((d) => {
         const u = d.users.find((x) => x.id === user.id);
@@ -939,10 +1078,189 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [user, isPremium, buzz]
   );
 
+  const applyForAcademy = useCallback(
+    async (input: {
+      fullName: string;
+      phone: string;
+      reason: string;
+      subjects: CourseId[];
+    }) => {
+      if (!user) return null;
+      const existing = getDB().applications.find(
+        (a) => a.userId === user.id && (a.status === 'awaiting_payment' || a.status === 'paid_pending' || a.status === 'approved')
+      );
+      if (existing && existing.status === 'approved') return existing;
+      const id = uid('app');
+      const rec: StudyApplication = {
+        id,
+        userId: user.id,
+        fullName: input.fullName.trim() || user.displayName,
+        phone: input.phone.trim() || user.phone,
+        reason: input.reason.trim(),
+        subjects: input.subjects.length ? input.subjects : ['forex', 'office', 'software'],
+        status: 'awaiting_payment',
+        createdAt: now(),
+        updatedAt: now(),
+        paymentId: null,
+        reviewedBy: null,
+        reviewNote: '',
+      };
+      await mutate((d) => {
+        d.applications = d.applications.filter((a) => !(a.userId === user.id && a.status === 'awaiting_payment'));
+        d.applications.unshift(rec);
+        d.notifications.unshift({
+          id: uid('ntf'),
+          userId: user.id,
+          type: 'academy',
+          title: 'Salon Academy',
+          body: `Pay Le ${ACADEMY_FEE} via Orange Money ${ORANGE_MONEY} for Forex, Office and Software Engineering.`,
+          read: false,
+          createdAt: now(),
+          relatedId: id,
+        });
+      });
+      buzz('success');
+      return rec;
+    },
+    [user, buzz]
+  );
+
+  const submitClassPayment = useCallback(
+    async (applicationId: string, senderNumber: string, reference: string) => {
+      if (!user) return false;
+      const sender = senderNumber.trim();
+      const ref = reference.trim();
+      if (!sender || !ref) return false;
+      const payId = uid('pay');
+      await mutate((d) => {
+        const a = d.applications.find((x) => x.id === applicationId && x.userId === user.id);
+        if (!a || a.status === 'approved') return;
+        const p: ClassPayment = {
+          id: payId,
+          applicationId,
+          userId: user.id,
+          amount: ACADEMY_FEE,
+          currency: 'SLE',
+          method: 'orange_money',
+          orangeNumber: ORANGE_MONEY,
+          senderNumber: sender,
+          reference: ref,
+          createdAt: now(),
+        };
+        d.payments.unshift(p);
+        a.status = 'paid_pending';
+        a.paymentId = payId;
+        a.updatedAt = now();
+        d.notifications.unshift({
+          id: uid('ntf'),
+          userId: user.id,
+          type: 'academy',
+          title: 'Payment received',
+          body: `Le ${ACADEMY_FEE} marked paid to ${ORANGE_MONEY}. Waiting for approval.`,
+          read: false,
+          createdAt: now(),
+          relatedId: applicationId,
+        });
+        d.users
+          .filter((u) => u.isDeveloper)
+          .forEach((dev) => {
+            d.notifications.unshift({
+              id: uid('ntf'),
+              userId: dev.id,
+              type: 'academy',
+              title: 'Academy payment',
+              body: `${user.displayName} paid Le ${ACADEMY_FEE}. Review the application.`,
+              read: false,
+              createdAt: now(),
+              relatedId: applicationId,
+            });
+          });
+      });
+      buzz('success');
+      return true;
+    },
+    [user, buzz]
+  );
+
+  const reviewApplication = useCallback(
+    async (applicationId: string, status: 'approved' | 'rejected', note?: string) => {
+      if (!user?.isDeveloper) return;
+      await mutate((d) => {
+        const a = d.applications.find((x) => x.id === applicationId);
+        if (!a) return;
+        a.status = status;
+        a.reviewedBy = user.id;
+        a.reviewNote = note || '';
+        a.updatedAt = now();
+        d.notifications.unshift({
+          id: uid('ntf'),
+          userId: a.userId,
+          type: 'academy',
+          title: status === 'approved' ? 'You are approved' : 'Application update',
+          body:
+            status === 'approved'
+              ? 'Salon Academy lectures are unlocked. Open Classroom.'
+              : `Your study application was not approved. ${note || ''}`.trim(),
+          read: false,
+          createdAt: now(),
+          relatedId: applicationId,
+        });
+      });
+      buzz(status === 'approved' ? 'success' : 'warning');
+    },
+    [user, buzz]
+  );
+
+  const myApplication = useCallback(() => {
+    if (!user) return undefined;
+    return db.applications.find((a) => a.userId === user.id);
+  }, [db.applications, user]);
+
+  const isAcademyApproved = useCallback(
+    (userId?: string) => {
+      const id = userId || user?.id;
+      if (!id) return false;
+      const u = db.users.find((x) => x.id === id);
+      if (u?.isDeveloper) return true;
+      return db.applications.some((a) => a.userId === id && a.status === 'approved');
+    },
+    [db.applications, db.users, user?.id]
+  );
+
+  const askLecture = useCallback(
+    async (subject: CourseId, question: string) => {
+      if (!user || !isAcademyApproved()) return 'Classroom is locked until your application is approved.';
+      const q = question.trim();
+      const answer = q ? askTeacher(subject, q) : openingLecture(subject);
+      await mutate((d) => {
+        if (q) {
+          d.lessons.push({
+            id: uid('lsn'),
+            userId: user.id,
+            subject,
+            role: 'student',
+            text: q,
+            createdAt: now(),
+          });
+        }
+        d.lessons.push({
+          id: uid('lsn'),
+          userId: user.id,
+          subject,
+          role: 'teacher',
+          text: answer,
+          createdAt: now() + 1,
+        });
+      });
+      return answer;
+    },
+    [user, isAcademyApproved]
+  );
+
   const value: AppContextValue = {
     ready,
     db,
-    user: user ? publicUser(user) : null,
+    user,
     users: db.users,
     posts: db.posts,
     listings: db.listings,
@@ -979,6 +1297,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     followingCount,
     openConversation,
     sendMessage,
+    sendMediaMessage,
     sendQuizMessage,
     markConversationRead,
     unreadCount,
@@ -997,6 +1316,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     boostPost,
     boostListing,
     cloudReady,
+    applications: db.applications,
+    payments: db.payments,
+    lessons: db.lessons,
+    applyForAcademy,
+    submitClassPayment,
+    reviewApplication,
+    myApplication,
+    isAcademyApproved,
+    askLecture,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

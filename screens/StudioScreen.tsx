@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
+import { SalonVideo } from '../components/SalonVideo';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
@@ -72,7 +72,7 @@ export default function StudioScreen() {
                 multiline
               />
               {clip ? (
-                <Video source={{ uri: clip }} style={styles.preview} useNativeControls resizeMode={ResizeMode.COVER} />
+                <SalonVideo uri={clip} height={180} autoPlay />
               ) : (
                 <Pressable onPress={pick} style={[styles.drop, { borderColor: palette.border, backgroundColor: palette.bgAlt }]}>
                   <Ionicons name="cloud-upload-outline" size={28} color={palette.primary} />
@@ -93,7 +93,7 @@ export default function StudioScreen() {
         ListEmptyComponent={<Empty icon="videocam-off-outline" title={t('noVideos')} />}
         renderItem={({ item }) => (
           <Card style={{ marginBottom: 12, padding: 0, overflow: 'hidden' }}>
-            <Video source={{ uri: item.publicUrl }} style={{ width: '100%', height: 200 }} useNativeControls resizeMode={ResizeMode.COVER} />
+            <SalonVideo uri={item.publicUrl} height={200} autoPlay />
             <View style={{ padding: 12 }}>
               <Text style={{ color: palette.text, fontWeight: '700' }}>{item.caption || 'Untitled clip'}</Text>
               <Text style={{ color: palette.muted, fontSize: 12, marginTop: 4 }}>

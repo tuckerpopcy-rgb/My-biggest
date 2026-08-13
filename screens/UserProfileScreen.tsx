@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Image } from 'expo-image';
 import { Avatar, Button, Card, Empty } from '../components/UI';
+import { VaultImage } from '../components/VaultImage';
 import { timeAgo } from '../lib/hash';
 
 export default function UserProfileScreen() {
@@ -46,7 +46,7 @@ export default function UserProfileScreen() {
         ListHeaderComponent={
           <View style={{ alignItems: 'center', marginBottom: 16 }}>
             {person.coverImage ? (
-              <Image source={{ uri: person.coverImage }} style={{ width: '100%', height: 120, borderRadius: 16, marginBottom: -40 }} contentFit="cover" />
+              <VaultImage uri={person.coverImage} style={{ width: '100%', height: 120, borderRadius: 16, marginBottom: -40 }} />
             ) : null}
             <Avatar uri={person.avatar} name={person.displayName} size={88} />
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
